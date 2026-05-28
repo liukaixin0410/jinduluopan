@@ -61,9 +61,9 @@ const migrateProjects = (projects: ProjectItem[]): ProjectItem[] => {
   }))
 }
 
-let localProjects = migrateProjects(loadFromStorage(STORAGE_KEYS.projects, [...mockProjects]))
-let localTodos = loadFromStorage(STORAGE_KEYS.todos, [...mockTodos])
-let localConfigs = loadFromStorage(STORAGE_KEYS.dataSources, [...mockDataSourceConfigs])
+let localProjects = migrateProjects(loadFromStorage(STORAGE_KEYS.projects, []))
+let localTodos = loadFromStorage(STORAGE_KEYS.todos, [])
+let localConfigs = loadFromStorage(STORAGE_KEYS.dataSources, [])
 
 /**
  * ========================================
