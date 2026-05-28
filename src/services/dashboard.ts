@@ -1,10 +1,7 @@
 import {
   mockAdsSummary,
   mockAdsConfig,
-  mockProjects,
   mockNews,
-  mockTodos,
-  mockDataSourceConfigs,
 } from '../mock/dashboard'
 import type {
   AdsSummaryResponse,
@@ -61,9 +58,9 @@ const migrateProjects = (projects: ProjectItem[]): ProjectItem[] => {
   }))
 }
 
-let localProjects = migrateProjects(loadFromStorage(STORAGE_KEYS.projects, []))
-let localTodos = loadFromStorage(STORAGE_KEYS.todos, [])
-let localConfigs = loadFromStorage(STORAGE_KEYS.dataSources, [])
+let localProjects: ProjectItem[] = migrateProjects(loadFromStorage(STORAGE_KEYS.projects, []))
+let localTodos: TodoItem[] = loadFromStorage(STORAGE_KEYS.todos, [])
+let localConfigs: DataSourceConfig[] = loadFromStorage(STORAGE_KEYS.dataSources, [])
 
 /**
  * ========================================
