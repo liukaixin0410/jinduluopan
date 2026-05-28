@@ -24,7 +24,7 @@ export function Layout() {
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl flex items-center justify-center shadow-md shadow-blue-500/20 overflow-hidden">
               <img 
-                src="https://space.coze.cn/s/7XlXb2oP-9A/" 
+                src="/logo.jpg" 
                 alt="Logo" 
                 className="w-full h-full object-cover"
               />
