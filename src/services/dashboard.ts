@@ -2,6 +2,9 @@ import {
   mockAdsSummary,
   mockAdsConfig,
   mockNews,
+  mockProjects,
+  mockTodos,
+  mockDataSourceConfigs,
 } from '../mock/dashboard'
 import type {
   AdsSummaryResponse,
@@ -804,4 +807,52 @@ export async function deleteDataSourceConfig(id: string): Promise<{ success: boo
   }
   const res = await fetch(`${API_BASE}/data-sources/${id}`, { method: 'DELETE' })
   return res.json()
+}
+
+// 恢复示例数据功能
+export async function restoreSampleData(): Promise<{ success: boolean; message: string }> {
+  if (USE_MOCK) {
+    await delay(300)
+    // 只在 localStorage 为空时才添加示例数据
+    const existingProjects = loadFromStorage(STORAGE_KEYS.projects, [] as any[])
+    const existingTodos = loadFromStorage(STORAGE_KEYS.todos, [] as any[])
+    
+    let restoredCount = 0
+    
+    // 恢复项目
+    if (existingProjects.length === 0) {
+      localProjects = migrateProjects([...mockProjects])
+      saveToStorage(STORAGE_KEYS.projects, localProjects)
+      restoredCount += mockProjects.length
+    } else {
+      localProjects = migrateProjects(existingProjects)
+    }
+    
+    // 恢复 Todo
+    if (existingTodos.length === 0) {
+      localTodos = [...mockTodos]
+      saveToStorage(STORAGE_KEYS.todos, localTodos)
+      restoredCount += mockTodos.length
+    } else {
+      localTodos = existingTodos
+    }
+    
+    // 恢复配置
+    const existingConfigs = loadFromStorage(STORAGE_KEYS.dataSources, [] as any[])
+    if (existingConfigs.length === 0) {
+      localConfigs = [...mockDataSourceConfigs]
+      saveToStorage(STORAGE_KEYS.dataSources, localConfigs)
+      restoredCount += mockDataSourceConfigs.length
+    } else {
+      localConfigs = existingConfigs
+    }
+    
+    return { 
+      success: true, 
+      message: restoredCount > 0 
+        ? `已恢复 ${restoredCount} 条示例数据` 
+        : '您已有数据，无需恢复'
+    }
+  }
+  return { success: false, message: '示例数据功能仅在本地模式可用' }
 }
