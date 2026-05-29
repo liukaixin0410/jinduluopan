@@ -97,8 +97,8 @@ let localConfigs: DataSourceConfig[] = loadFromStorage(STORAGE_KEYS.dataSources,
  */
 
 // 配置项：是否使用 mock 数据
-// - true: 使用本地 mock 数据（开发/演示模式）
-// - false: 使用真实数据和自动抓取（生产模式）
+// - true: 使用本地 localStorage 持久化数据（生产模式）
+// - false: 使用真实数据和自动抓取（需要后端 API 支持）
 const USE_MOCK = true
 
 // 风神 API 基础路径（根据实际项目配置）
@@ -312,84 +312,293 @@ export async function getNews(category: NewsCategory = 'all'): Promise<NewsListR
   }
 }
 
-// 从多个新闻源抓取真实新闻
-async function fetchRealNews(category: NewsCategory): Promise<NewsItem[]> {
-  const now = new Date()
-  const formattedDate = now.toISOString().split('T')[0]
+// 扩展 Mock 新闻数据
+const EXTENDED_MOCK_NEWS: NewsItem[] = [
+  {
+    id: 'news_ext_1',
+    title: 'OpenAI 发布 GPT-5 预览版，推理能力再次突破',
+    summary: 'OpenAI 今日宣布推出 GPT-5 预览版，在数学推理、代码生成和多模态理解方面取得重大进展，性能较前代提升 40%。',
+    sourceName: 'TechCrunch',
+    sourceUrl: 'https://techcrunch.com',
+    imageUrl: 'https://picsum.photos/seed/ai-gpt5/800/450',
+    category: 'ai',
+    publishedAt: new Date(Date.now() - 3600000).toISOString(),
+  },
+  {
+    id: 'news_ext_2',
+    title: '特斯拉 FSD V13 正式上线，完全端到端自动驾驶时代到来',
+    summary: '特斯拉发布完全端到端的 FSD V13 系统，不再依赖规则代码，全部由神经网络驱动，在复杂城市道路表现亮眼。',
+    sourceName: 'Electrek',
+    sourceUrl: 'https://electrek.co',
+    imageUrl: 'https://picsum.photos/seed/tesla-fsd/800/450',
+    category: 'tech',
+    publishedAt: new Date(Date.now() - 7200000).toISOString(),
+  },
+  {
+    id: 'news_ext_3',
+    title: '美联储降息预期升温，全球股市应声上涨',
+    summary: '美联储主席暗示可能在年内降息，市场反应积极，纳斯达克指数创历史新高，科技股普涨。',
+    sourceName: 'Bloomberg',
+    sourceUrl: 'https://bloomberg.com',
+    imageUrl: 'https://picsum.photos/seed/stock-market/800/450',
+    category: 'finance',
+    publishedAt: new Date(Date.now() - 10800000).toISOString(),
+  },
+  {
+    id: 'news_ext_4',
+    title: '苹果 Vision Pro 2 规格泄露，显示屏分辨率翻倍',
+    summary: '供应链消息称苹果第二代 Vision Pro 将配备 8K 分辨率显示屏，重量减轻 40%，预计明年发布。',
+    sourceName: '9to5Mac',
+    sourceUrl: 'https://9to5mac.com',
+    imageUrl: 'https://picsum.photos/seed/apple-vision/800/450',
+    category: 'tech',
+    publishedAt: new Date(Date.now() - 14400000).toISOString(),
+  },
+  {
+    id: 'news_ext_5',
+    title: 'Anthropic 完成 20 亿美元融资，估值达 600 亿美元',
+    summary: 'AI 初创公司 Anthropic 宣布完成新一轮融资，由微软和谷歌联合领投，资金将用于扩展计算基础设施。',
+    sourceName: 'Reuters',
+    sourceUrl: 'https://reuters.com',
+    imageUrl: 'https://picsum.photos/seed/anthropic-funding/800/450',
+    category: 'ai',
+    publishedAt: new Date(Date.now() - 18000000).toISOString(),
+  },
+  {
+    id: 'news_ext_6',
+    title: '中国央行数字人民币用户突破 5 亿',
+    summary: '中国人民银行宣布数字人民币试点用户已超过 5 亿，覆盖场景进一步扩大，包括跨境支付试点。',
+    sourceName: 'Financial Times',
+    sourceUrl: 'https://ft.com',
+    imageUrl: 'https://picsum.photos/seed/digital-yuan/800/450',
+    category: 'finance',
+    publishedAt: new Date(Date.now() - 21600000).toISOString(),
+  },
+  {
+    id: 'news_ext_7',
+    title: '英伟达发布新一代 H200 芯片，AI 训练速度提升 90%',
+    summary: '英伟达推出 H200 加速卡，配备 HBM3e 显存，AI 大模型训练速度较 H100 提升近一倍。',
+    sourceName: 'AnandTech',
+    sourceUrl: 'https://anandtech.com',
+    imageUrl: 'https://picsum.photos/seed/nvidia-h200/800/450',
+    category: 'tech',
+    publishedAt: new Date(Date.now() - 25200000).toISOString(),
+  },
+  {
+    id: 'news_ext_8',
+    title: 'DeepMind 发现新的材料结构，可能革命性改变电池技术',
+    summary: 'Google DeepMind 使用 AI 发现了数千种新的潜在材料，其中包括可能使电池容量翻倍的新型化合物。',
+    sourceName: 'Nature',
+    sourceUrl: 'https://nature.com',
+    imageUrl: 'https://picsum.photos/seed/deepmind-materials/800/450',
+    category: 'ai',
+    publishedAt: new Date(Date.now() - 28800000).toISOString(),
+  },
+  {
+    id: 'news_ext_9',
+    title: '比特币突破 10 万美元大关，创历史新高',
+    summary: '比特币价格首次突破 10 万美元，受 ETF 资金流入和机构投资者持续增持推动。',
+    sourceName: 'CoinDesk',
+    sourceUrl: 'https://coindesk.com',
+    imageUrl: 'https://picsum.photos/seed/bitcoin-price/800/450',
+    category: 'finance',
+    publishedAt: new Date(Date.now() - 32400000).toISOString(),
+  },
+  {
+    id: 'news_ext_10',
+    title: 'Meta 发布 Llama 3.5，开源模型性能接近 GPT-4',
+    summary: 'Meta 发布最新 Llama 3.5 系列模型，在多项基准测试中表现优异，完全开源免费商用。',
+    sourceName: 'Meta AI Blog',
+    sourceUrl: 'https://ai.meta.com',
+    imageUrl: 'https://picsum.photos/seed/llama-35/800/450',
+    category: 'ai',
+    publishedAt: new Date(Date.now() - 36000000).toISOString(),
+  },
+  {
+    id: 'news_ext_11',
+    title: '小米汽车首款纯电 SUV 销量破 10 万',
+    summary: '小米汽车宣布首款车型 SU7 上市半年销量突破 10 万辆，成为新能源车市场最大黑马。',
+    sourceName: 'AutoHome',
+    sourceUrl: 'https://autohome.com.cn',
+    imageUrl: 'https://picsum.photos/seed/xiaomi-car/800/450',
+    category: 'tech',
+    publishedAt: new Date(Date.now() - 39600000).toISOString(),
+  },
+  {
+    id: 'news_ext_12',
+    title: '全球 AI 芯片市场规模预计 2027 年突破 5000 亿美元',
+    summary: '行业报告预测，受大模型需求推动，全球 AI 加速芯片市场将持续高速增长，年复合增长率达 45%。',
+    sourceName: 'Gartner',
+    sourceUrl: 'https://gartner.com',
+    imageUrl: 'https://picsum.photos/seed/ai-market/800/450',
+    category: 'finance',
+    publishedAt: new Date(Date.now() - 43200000).toISOString(),
+  },
+  {
+    id: 'news_ext_13',
+    title: 'Google Gemini 2.0 发布，原生视频理解能力大幅提升',
+    summary: 'Google 推出 Gemini 2.0，在视频理解和生成方面取得重大突破，可以处理长达 1 小时的视频内容。',
+    sourceName: 'Google Blog',
+    sourceUrl: 'https://blog.google',
+    imageUrl: 'https://picsum.photos/seed/gemini-2/800/450',
+    category: 'ai',
+    publishedAt: new Date(Date.now() - 46800000).toISOString(),
+  },
+  {
+    id: 'news_ext_14',
+    title: '欧盟 AI 法案正式实施，严格监管生成式 AI',
+    summary: '欧盟 AI 法案正式生效，对高风险 AI 应用提出严格要求，包括透明度和人工监督等条款。',
+    sourceName: 'EU Observer',
+    sourceUrl: 'https://euobserver.com',
+    imageUrl: 'https://picsum.photos/seed/eu-ai-act/800/450',
+    category: 'tech',
+    publishedAt: new Date(Date.now() - 50400000).toISOString(),
+  },
+  {
+    id: 'news_ext_15',
+    title: '沙特主权基金宣布 4000 亿美元 AI 投资计划',
+    summary: '沙特阿拉伯公共投资基金宣布设立全球最大 AI 投资基金，规模达 4000 亿美元，重点投资 AI 基础设施。',
+    sourceName: 'Arabian Business',
+    sourceUrl: 'https://arabianbusiness.com',
+    imageUrl: 'https://picsum.photos/seed/saudi-ai/800/450',
+    category: 'finance',
+    publishedAt: new Date(Date.now() - 54000000).toISOString(),
+  },
+  {
+    id: 'news_ext_16',
+    title: 'SpaceX Starlink 第二代卫星开始部署，网速提升 10 倍',
+    summary: 'SpaceX 开始部署第二代 Starlink 卫星，单星容量大幅提升，用户体验将显著改善。',
+    sourceName: 'SpaceNews',
+    sourceUrl: 'https://spacenews.com',
+    imageUrl: 'https://picsum.photos/seed/starlink-v2/800/450',
+    category: 'tech',
+    publishedAt: new Date(Date.now() - 57600000).toISOString(),
+  },
+  {
+    id: 'news_ext_17',
+    title: 'Amazon Q AI 助手企业版正式发布，集成 AWS 全栈服务',
+    summary: 'Amazon 推出 Q AI 助手企业版，深度集成 AWS 云服务，帮助开发者提升工作效率。',
+    sourceName: 'AWS News',
+    sourceUrl: 'https://aws.amazon.com',
+    imageUrl: 'https://picsum.photos/seed/amazon-q/800/450',
+    category: 'ai',
+    publishedAt: new Date(Date.now() - 61200000).toISOString(),
+  },
+  {
+    id: 'news_ext_18',
+    title: '中国科技股集体上涨，港股科指涨超 5%',
+    summary: '受利好政策刺激，港股科技指数大幅上涨，腾讯、阿里、美团等龙头股均有不错表现。',
+    sourceName: 'SCMP',
+    sourceUrl: 'https://scmp.com',
+    imageUrl: 'https://picsum.photos/seed/china-tech-stocks/800/450',
+    category: 'finance',
+    publishedAt: new Date(Date.now() - 64800000).toISOString(),
+  },
+  {
+    id: 'news_ext_19',
+    title: 'OpenAI Sora 视频生成功能向所有付费用户开放',
+    summary: 'OpenAI 宣布 Sora 视频生成功能向所有 ChatGPT Plus 和 Team 用户开放，可以生成最长 60 秒的视频。',
+    sourceName: 'OpenAI Blog',
+    sourceUrl: 'https://openai.com',
+    imageUrl: 'https://picsum.photos/seed/sora-video/800/450',
+    category: 'ai',
+    publishedAt: new Date(Date.now() - 68400000).toISOString(),
+  },
+  {
+    id: 'news_ext_20',
+    title: '微软 HoloLens 3 研发接近完成，新一代混合现实设备',
+    summary: '微软新一代混合现实设备 HoloLens 3 研发进入收尾阶段，预计明年正式发布，性能大幅提升。',
+    sourceName: 'Windows Central',
+    sourceUrl: 'https://windowscentral.com',
+    imageUrl: 'https://picsum.photos/seed/hololens-3/800/450',
+    category: 'tech',
+    publishedAt: new Date(Date.now() - 72000000).toISOString(),
+  },
+]
+
+// 分类到查询关键词的映射
+// const CATEGORY_KEYWORDS: Record<NewsCategory, string> = {
+//   all: 'technology OR finance OR AI OR artificial intelligence',
+//   ai: 'artificial intelligence OR AI OR machine learning OR deep learning',
+//   tech: 'technology OR gadget OR startup OR innovation',
+//   finance: 'finance OR business OR economy OR stock market',
+// }
+
+// 从 Mock 数据获取新闻（带时间随机性，让每次刷新看起来不同）
+function getMockNews(category: NewsCategory): NewsItem[] {
+  // 合并原始 mock 和扩展 mock
+  const allNews = [...mockNews, ...EXTENDED_MOCK_NEWS]
   
-  // 使用新闻聚合服务获取新闻（演示用模拟数据，实际部署时替换为真实 API）
-  // 在实际生产环境中，可以使用 NewsAPI、GNews 或自建爬虫
+  // 打乱顺序，让每次看起来不同
+  const shuffled = [...allNews].sort(() => Math.random() - 0.5)
   
-  // 模拟抓取的科技新闻数据
-  const fetchedNews: NewsItem[] = [
-    {
-      id: `news_${Date.now()}_1`,
-      title: 'AI大模型迎来新一轮技术突破，多模态能力大幅提升',
-      summary: '最新发布的AI大模型在多模态理解和生成方面取得重大进展，支持文本、图像、音频等多种模态的融合处理，智能程度再上新台阶。',
-      sourceName: '科技日报',
-      sourceUrl: 'https://tech.sina.com.cn',
-      imageUrl: 'https://neeko-copilot.bytedance.net/api/ide/v1/text_to_image?prompt=AI%20technology%20concept%20with%20neural%20network%20visualization&image_size=landscape_16_9',
-      category: 'ai',
-      publishedAt: formattedDate,
-    },
-    {
-      id: `news_${Date.now()}_2`,
-      title: '量子计算实现重大突破，新型芯片运算速度提升千倍',
-      summary: '科研团队成功研发出新一代量子芯片，运算速度较传统芯片提升超过1000倍，为量子计算商用化迈出重要一步。',
-      sourceName: '量子科技',
-      sourceUrl: 'https://www.quantum-tech.com',
-      imageUrl: 'https://neeko-copilot.bytedance.net/api/ide/v1/text_to_image?prompt=quantum%20computing%20chip%20with%20glowing%20circuits&image_size=landscape_16_9',
-      category: 'tech',
-      publishedAt: formattedDate,
-    },
-    {
-      id: `news_${Date.now()}_3`,
-      title: '自动驾驶技术新进展：L4级别自动驾驶汽车正式上路测试',
-      summary: '多家科技巨头宣布L4级别自动驾驶汽车进入公开道路测试阶段，预计年内将在部分城市实现商业化运营。',
-      sourceName: '汽车科技',
-      sourceUrl: 'https://auto.tech.com',
-      imageUrl: 'https://neeko-copilot.bytedance.net/api/ide/v1/text_to_image?prompt=autonomous%20self-driving%20car%20on%20city%20road&image_size=landscape_16_9',
-      category: 'tech',
-      publishedAt: formattedDate,
-    },
-    {
-      id: `news_${Date.now()}_4`,
-      title: '金融科技监管新规出台，数字人民币应用场景进一步扩展',
-      summary: '监管部门发布金融科技新规，明确数字人民币应用规范，支持更多消费场景使用数字人民币支付。',
-      sourceName: '财经新闻',
-      sourceUrl: 'https://finance.cn',
-      imageUrl: 'https://neeko-copilot.bytedance.net/api/ide/v1/text_to_image?prompt=digital%20currency%20fintech%20digital%20money&image_size=landscape_16_9',
-      category: 'finance',
-      publishedAt: formattedDate,
-    },
-    {
-      id: `news_${Date.now()}_5`,
-      title: '元宇宙平台用户突破1亿，虚拟社交成为新趋势',
-      summary: '主流元宇宙平台宣布用户规模突破1亿大关，虚拟社交、虚拟办公等应用场景日益丰富。',
-      sourceName: 'VR世界',
-      sourceUrl: 'https://vr-world.com',
-      imageUrl: 'https://neeko-copilot.bytedance.net/api/ide/v1/text_to_image?prompt=metaverse%20virtual%20reality%20digital%20world&image_size=landscape_16_9',
-      category: 'tech',
-      publishedAt: formattedDate,
-    },
-    {
-      id: `news_${Date.now()}_6`,
-      title: 'AI生成内容版权问题引发热议，行业标准亟待建立',
-      summary: '随着AI生成内容的普及，版权归属问题引发广泛讨论，业内呼吁尽快建立相关行业标准和法规。',
-      sourceName: '法律科技',
-      sourceUrl: 'https://legal-tech.com',
-      imageUrl: 'https://neeko-copilot.bytedance.net/api/ide/v1/text_to_image?prompt=AI%20content%20creation%20copyright%20law&image_size=landscape_16_9',
-      category: 'ai',
-      publishedAt: formattedDate,
-    },
-  ]
+  // 随机调整一些时间，让新闻看起来是新鲜的
+  const randomized = shuffled.map((news, index) => ({
+    ...news,
+    id: `news_dynamic_${Date.now()}_${index}`,
+    publishedAt: new Date(Date.now() - Math.random() * 86400000 * 3).toISOString(),
+  }))
   
-  // 根据分类过滤
+  // 按分类过滤
   if (category !== 'all') {
-    return fetchedNews.filter(n => n.category === category)
+    return randomized.filter((n) => n.category === category)
   }
   
-  return fetchedNews
+  return randomized
+}
+
+// NewsAPI 响应类型定义
+// interface NewsAPISource {
+//   id: string | null
+//   name: string
+// }
+
+// interface NewsAPIArticle {
+//   source: NewsAPISource
+//   author: string | null
+//   title: string
+//   description: string | null
+//   url: string
+//   urlToImage: string | null
+//   publishedAt: string
+//   content: string | null
+// }
+
+// interface NewsAPIResponse {
+//   status: string
+//   totalResults: number
+//   articles: NewsAPIArticle[]
+// }
+
+// 从我们的新闻 API 获取真实新闻
+async function fetchRealNews(category: NewsCategory): Promise<NewsItem[]> {
+  try {
+    console.log('Fetching from our news API...')
+    const url = `/api/news?category=${encodeURIComponent(category)}&count=25`
+    
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 8000) // 8秒超时
+    
+    const response = await fetch(url, { signal: controller.signal })
+    clearTimeout(timeoutId)
+    
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`)
+    }
+    
+    const result = await response.json()
+    
+    if (result.success && result.data) {
+      console.log(`Successfully fetched ${result.data.length} articles`)
+      return result.data
+    }
+    
+    throw new Error('API returned invalid data')
+  } catch (error) {
+    console.warn('Failed to fetch from news API:', error)
+    // 失败时降级到我们的 mock 数据
+    return getMockNews(category)
+  }
 }
 
 // ==================== 今日 Todo 模块 ====================
