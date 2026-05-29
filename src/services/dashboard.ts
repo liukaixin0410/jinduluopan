@@ -99,7 +99,7 @@ let localConfigs: DataSourceConfig[] = loadFromStorage(STORAGE_KEYS.dataSources,
 // 配置项：是否使用 mock 数据
 // - true: 使用本地 mock 数据（开发/演示模式）
 // - false: 使用真实数据和自动抓取（生产模式）
-const USE_MOCK = false
+const USE_MOCK = true
 
 // 风神 API 基础路径（根据实际项目配置）
 // 请将此处替换为您真实的风神数据接口地址
