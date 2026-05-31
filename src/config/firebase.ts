@@ -12,10 +12,24 @@ const firebaseConfig = {
   measurementId: "G-E0HHKY4NK1"
 };
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
+// 延迟初始化Firebase，只在需要时才初始化
+let app: any = null;
+let db: any = null;
+let initialized = false;
 
-// Initialize Firestore
-export const db = getFirestore(app);
+export function getFirebaseDb() {
+  if (!initialized) {
+    try {
+      app = initializeApp(firebaseConfig);
+      db = getFirestore(app);
+      console.log('Firebase 初始化成功');
+    } catch (error) {
+      console.warn('Firebase 初始化失败:', error);
+      db = null;
+    }
+    initialized = true;
+  }
+  return db;
+}
 
 export default app;

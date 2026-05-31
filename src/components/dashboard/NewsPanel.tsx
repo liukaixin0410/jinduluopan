@@ -9,6 +9,8 @@ interface NewsCardProps {
 }
 
 function NewsCard({ news }: NewsCardProps) {
+  const [imageError, setImageError] = useState(false)
+
   const formatDate = (dateStr: string) => {
     const d = new Date(dateStr)
     const now = new Date()
@@ -20,14 +22,28 @@ function NewsCard({ news }: NewsCardProps) {
     return `${days}天前`
   }
 
-  const getCategoryColor = (category: string) => {
-    const colors: Record<string, string> = {
-      ai: 'from-purple-500 to-indigo-600',
-      tech: 'from-blue-500 to-cyan-600',
-      finance: 'from-green-500 to-emerald-600',
+  const getCategoryConfig = (category: string) => {
+    const configs: Record<string, { gradient: string; icon: string; label: string }> = {
+      ai: {
+        gradient: 'from-violet-500 via-purple-500 to-indigo-600',
+        icon: '🤖',
+        label: 'AI资讯',
+      },
+      tech: {
+        gradient: 'from-blue-500 via-cyan-500 to-teal-600',
+        icon: '💻',
+        label: '科技新闻',
+      },
+      finance: {
+        gradient: 'from-emerald-500 via-green-500 to-teal-600',
+        icon: '📈',
+        label: '金融动态',
+      },
     }
-    return colors[category] || 'from-gray-500 to-slate-600'
+    return configs[category] || configs.tech
   }
+
+  const config = getCategoryConfig(news.category)
 
   return (
     <a
@@ -36,11 +52,24 @@ function NewsCard({ news }: NewsCardProps) {
       rel='noopener noreferrer'
       className='group block bg-white rounded-xl overflow-hidden border border-gray-100 hover:border-gray-200 hover:shadow-lg transition-all duration-300'
     >
-      <div className={`aspect-[16/9] bg-gradient-to-br ${getCategoryColor(news.category)} flex items-center justify-center`}>
-        <div className='text-white text-center p-4'>
-          <div className='text-4xl mb-2'>📰</div>
-          <div className='text-sm opacity-80'>{news.category === 'ai' ? 'AI资讯' : news.category === 'tech' ? '科技新闻' : news.category === 'finance' ? '金融动态' : '新闻'}</div>
-        </div>
+      <div className='aspect-[16/9] relative overflow-hidden'>
+        {news.imageUrl && !imageError ? (
+          <img
+            src={news.imageUrl}
+            alt={news.title}
+            className='w-full h-full object-cover transition-transform duration-500 group-hover:scale-105'
+            onError={() => setImageError(true)}
+            loading='lazy'
+          />
+        ) : (
+          <div className={`w-full h-full bg-gradient-to-br ${config.gradient} flex items-center justify-center`}>
+            <div className='text-white text-center p-4'>
+              <div className='text-5xl mb-3 drop-shadow-lg'>{config.icon}</div>
+              <div className='text-sm font-medium opacity-90 backdrop-blur-sm bg-white/20 px-3 py-1 rounded-full'>{config.label}</div>
+            </div>
+          </div>
+        )}
+        <div className='absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent' />
       </div>
       <div className='p-5'>
         <h4 className='text-base font-semibold text-gray-900 line-clamp-2 group-hover:text-blue-600 transition-colors leading-snug'>

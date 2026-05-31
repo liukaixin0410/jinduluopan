@@ -36,18 +36,19 @@ async function initFirebase() {
   try {
     // 动态导入 Firebase，避免配置错误时崩溃
     const firebaseConfig = await import('../config/firebase.js')
-    db = firebaseConfig.db
-    isFirebaseAvailable = true
-    console.log('Firebase 初始化成功')
+    db = firebaseConfig.getFirebaseDb()
+    isFirebaseAvailable = !!db
+    if (isFirebaseAvailable) {
+      console.log('Firebase 初始化成功')
+    } else {
+      console.warn('Firebase 不可用，将使用 localStorage 模式')
+    }
   } catch (error) {
     console.warn('Firebase 未配置，将使用 localStorage 模式:', error)
     isFirebaseAvailable = false
   }
   firebaseInitialized = true
 }
-
-// 立即初始化 Firebase
-initFirebase()
 
 // ==================== localStorage 持久化工具 ====================
 const STORAGE_KEYS = {
@@ -89,8 +90,12 @@ const migrateProjects = (projects: ProjectItem[]): ProjectItem[] => {
   }))
 }
 
-let localProjects: ProjectItem[] = migrateProjects(loadFromStorage(STORAGE_KEYS.projects, []))
-let localTodos: TodoItem[] = loadFromStorage(STORAGE_KEYS.todos, [])
+// 从 localStorage 读取数据，完全保留用户历史数据
+const storedProjects = loadFromStorage(STORAGE_KEYS.projects, [] as ProjectItem[])
+const storedTodos = loadFromStorage(STORAGE_KEYS.todos, [] as TodoItem[])
+
+let localProjects: ProjectItem[] = migrateProjects(storedProjects)
+let localTodos: TodoItem[] = storedTodos
 let localConfigs: DataSourceConfig[] = loadFromStorage(STORAGE_KEYS.dataSources, [])
 
 // ==================== Firebase 数据操作工具 ====================
@@ -393,30 +398,28 @@ export async function deleteProject(id: string): Promise<{ success: boolean }> {
 
 /**
  * 获取新闻列表
- * GET /api/dashboard/news?category=:category
+ * GET /api/news?category=:category
  * 
  * 【自动抓取说明】
- * - 线上版本：自动从多个新闻源抓取最新科技新闻
- * - 开发模式：使用本地 mock 数据
+ * - 本地开发：调用本地RSS抓取服务器 http://localhost:3001/api/news
+ * - 线上版本：Vercel Edge Function 自动抓取
  * - 支持分类筛选：AI、科技、金融等
  */
 export async function getNews(category: NewsCategory = 'all'): Promise<NewsListResponse> {
-  if (USE_MOCK) {
-    await delay(500)
-    let data = mockNews
-    if (category !== 'all') {
-      data = mockNews.filter((n) => n.category === category)
-    }
-    return { success: true, data }
-  }
-  
-  // 线上版本：自动抓取真实新闻数据
   try {
-    const newsData = await fetchRealNews(category)
-    return { success: true, data: newsData }
+    // 调用本地API服务器（真实RSS抓取）
+    const response = await fetch(`http://localhost:3001/api/news?category=${category}&count=50`)
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`)
+    }
+    const result = await response.json()
+    console.log(`📰 Fetched ${result.data.length} news items from ${result.source}`)
+    return { success: true, data: result.data }
   } catch (error) {
     console.error('Failed to fetch real news:', error)
-    // 如果抓取失败，返回 mock 数据作为降级
+    console.warn('⚠️ Falling back to mock news...')
+    
+    // 降级到本地mock数据
     let data = mockNews
     if (category !== 'all') {
       data = mockNews.filter((n) => n.category === category)
