@@ -24,7 +24,7 @@ import type {
 
 // ==================== 数据存储模式配置 ====================
 // 可选值: 'local' (localStorage) | 'firebase' (Firebase Firestore)
-const DATA_STORAGE_MODE: 'local' | 'firebase' = 'firebase';
+const DATA_STORAGE_MODE: 'local' | 'firebase' = 'local';
 
 // ==================== Firebase 集成 (可选) ====================
 let db: any = null
@@ -48,6 +48,30 @@ async function initFirebase() {
     isFirebaseAvailable = false
   }
   firebaseInitialized = true
+}
+
+// 在模块加载时就初始化 Firebase（如果配置了 Firebase 模式）
+if (typeof window !== 'undefined' && DATA_STORAGE_MODE === 'firebase') {
+  console.log('🚀 检测到 Firebase 模式，开始初始化...')
+  initFirebase().then(async () => {
+    // 检查 Firebase 是否有数据，如果没有则自动写入示例数据
+    if (isFirebaseAvailable && db) {
+      try {
+        const { collection, getDocs } = await import('firebase/firestore')
+        const projectsSnapshot = await getDocs(collection(db, 'projects'))
+        const todosSnapshot = await getDocs(collection(db, 'todos'))
+        
+        if (projectsSnapshot.empty && todosSnapshot.empty) {
+          console.log('🔧 Firebase 为空，自动写入示例数据...')
+          await seedFirebaseWithSampleData()
+        } else {
+          console.log('✅ Firebase 已有数据，跳过初始化')
+        }
+      } catch (error) {
+        console.error('❌ 检查 Firebase 数据失败:', error)
+      }
+    }
+  })
 }
 
 // ==================== localStorage 持久化工具 ====================
