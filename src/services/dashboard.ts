@@ -24,7 +24,7 @@ import type {
 
 // ==================== 数据存储模式配置 ====================
 // 可选值: 'local' (localStorage) | 'firebase' (Firebase Firestore)
-const DATA_STORAGE_MODE: 'local' | 'firebase' = 'local';
+const DATA_STORAGE_MODE: 'local' | 'firebase' = 'firebase';
 
 // ==================== Firebase 集成 (可选) ====================
 let db: any = null
@@ -33,45 +33,23 @@ let firebaseInitialized = false
 
 async function initFirebase() {
   if (firebaseInitialized) return
+  console.log('🔄 正在初始化 Firebase...')
   try {
     // 动态导入 Firebase，避免配置错误时崩溃
-    const firebaseConfig = await import('../config/firebase.js')
+    const firebaseConfig = await import('../config/firebase')
     db = firebaseConfig.getFirebaseDb()
     isFirebaseAvailable = !!db
+    console.log('Firebase db:', db ? '✅ 已连接' : '❌ 未连接')
     if (isFirebaseAvailable) {
-      console.log('Firebase 初始化成功')
+      console.log('✅ Firebase 初始化成功')
     } else {
-      console.warn('Firebase 不可用，将使用 localStorage 模式')
+      console.warn('⚠️ Firebase 不可用，将使用 localStorage 模式')
     }
   } catch (error) {
-    console.warn('Firebase 未配置，将使用 localStorage 模式:', error)
+    console.warn('❌ Firebase 未配置，将使用 localStorage 模式:', error)
     isFirebaseAvailable = false
   }
   firebaseInitialized = true
-}
-
-// 在模块加载时就初始化 Firebase（如果配置了 Firebase 模式）
-if (typeof window !== 'undefined' && DATA_STORAGE_MODE === 'firebase') {
-  console.log('🚀 检测到 Firebase 模式，开始初始化...')
-  initFirebase().then(async () => {
-    // 检查 Firebase 是否有数据，如果没有则自动写入示例数据
-    if (isFirebaseAvailable && db) {
-      try {
-        const { collection, getDocs } = await import('firebase/firestore')
-        const projectsSnapshot = await getDocs(collection(db, 'projects'))
-        const todosSnapshot = await getDocs(collection(db, 'todos'))
-        
-        if (projectsSnapshot.empty && todosSnapshot.empty) {
-          console.log('🔧 Firebase 为空，自动写入示例数据...')
-          await seedFirebaseWithSampleData()
-        } else {
-          console.log('✅ Firebase 已有数据，跳过初始化')
-        }
-      } catch (error) {
-        console.error('❌ 检查 Firebase 数据失败:', error)
-      }
-    }
-  })
 }
 
 // ==================== localStorage 持久化工具 ====================
@@ -320,13 +298,21 @@ export async function getAdsConfig(): Promise<AdsConfigResponse> {
  * 获取项目列表
  */
 export async function getProjects(): Promise<ProjectListResponse> {
-  if (await useFirebase()) {
+  console.log('📋 getProjects 被调用')
+  console.log('📊 DATA_STORAGE_MODE:', DATA_STORAGE_MODE)
+  const useFb = await useFirebase()
+  console.log('🔌 useFirebase():', useFb)
+  
+  if (useFb) {
+    console.log('📡 使用 Firebase 加载项目...')
     await delay(400)
     const data = await getFromFirebase<ProjectItem>('projects')
+    console.log('📦 从 Firebase 加载到', data.length, '个项目')
     return { success: true, data: migrateProjects(data) }
   }
   
   if (USE_MOCK) {
+    console.log('💾 使用 localStorage 加载项目，项目数:', localProjects.length)
     await delay(400)
     return { success: true, data: localProjects }
   }
@@ -711,6 +697,7 @@ function getMockNews(category: NewsCategory): NewsItem[] {
 // }
 
 // 从我们的新闻 API 获取真实新闻
+// @ts-ignore: unused function, kept for future use
 async function fetchRealNews(category: NewsCategory): Promise<NewsItem[]> {
   try {
     console.log('Fetching from our news API...')
