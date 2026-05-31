@@ -22,6 +22,33 @@ import type {
   DataSourceConfig,
 } from '../types/dashboard'
 
+// ==================== 数据存储模式配置 ====================
+// 可选值: 'local' (localStorage) | 'firebase' (Firebase Firestore)
+const DATA_STORAGE_MODE: 'local' | 'firebase' = 'firebase';
+
+// ==================== Firebase 集成 (可选) ====================
+let db: any = null
+let isFirebaseAvailable = false
+let firebaseInitialized = false
+
+async function initFirebase() {
+  if (firebaseInitialized) return
+  try {
+    // 动态导入 Firebase，避免配置错误时崩溃
+    const firebaseConfig = await import('../config/firebase.js')
+    db = firebaseConfig.db
+    isFirebaseAvailable = true
+    console.log('Firebase 初始化成功')
+  } catch (error) {
+    console.warn('Firebase 未配置，将使用 localStorage 模式:', error)
+    isFirebaseAvailable = false
+  }
+  firebaseInitialized = true
+}
+
+// 立即初始化 Firebase
+initFirebase()
+
 // ==================== localStorage 持久化工具 ====================
 const STORAGE_KEYS = {
   projects: 'dashboard_projects',
@@ -66,6 +93,63 @@ let localProjects: ProjectItem[] = migrateProjects(loadFromStorage(STORAGE_KEYS.
 let localTodos: TodoItem[] = loadFromStorage(STORAGE_KEYS.todos, [])
 let localConfigs: DataSourceConfig[] = loadFromStorage(STORAGE_KEYS.dataSources, [])
 
+// ==================== Firebase 数据操作工具 ====================
+async function getFromFirebase<T>(collection: string): Promise<T[]> {
+  if (!isFirebaseAvailable || !db) return []
+  try {
+    const { collection: firestoreCollection, getDocs, query, orderBy } = await import('firebase/firestore')
+    const q = query(firestoreCollection(db, collection), orderBy('createdAt', 'desc'))
+    const querySnapshot = await getDocs(q)
+    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as T[]
+  } catch (error) {
+    console.error('Firebase get error:', error)
+    return []
+  }
+}
+
+async function saveToFirebase<T extends { id?: string }>(collection: string, data: T): Promise<T> {
+  if (!isFirebaseAvailable || !db) return data
+  try {
+    const { collection: firestoreCollection, doc, setDoc, addDoc } = await import('firebase/firestore')
+    if (data.id) {
+      await setDoc(doc(db, collection, data.id), data)
+      return data
+    } else {
+      const docRef = await addDoc(firestoreCollection(db, collection), data)
+      return { ...data, id: docRef.id } as T
+    }
+  } catch (error) {
+    console.error('Firebase save error:', error)
+    return data
+  }
+}
+
+async function updateInFirebase<T>(collection: string, id: string, data: Partial<T>): Promise<void> {
+  if (!isFirebaseAvailable || !db) return
+  try {
+    const { doc, updateDoc } = await import('firebase/firestore')
+    await updateDoc(doc(db, collection, id), data)
+  } catch (error) {
+    console.error('Firebase update error:', error)
+  }
+}
+
+async function deleteFromFirebase(collection: string, id: string): Promise<void> {
+  if (!isFirebaseAvailable || !db) return
+  try {
+    const { doc, deleteDoc } = await import('firebase/firestore')
+    await deleteDoc(doc(db, collection, id))
+  } catch (error) {
+    console.error('Firebase delete error:', error)
+  }
+}
+
+// ==================== 统一数据访问层 ====================
+async function useFirebase(): Promise<boolean> {
+  await initFirebase()
+  return DATA_STORAGE_MODE === 'firebase' && isFirebaseAvailable
+}
+
 /**
  * ========================================
  * 服务层配置 - 风神数据同步说明
@@ -102,7 +186,7 @@ let localConfigs: DataSourceConfig[] = loadFromStorage(STORAGE_KEYS.dataSources,
 // 配置项：是否使用 mock 数据
 // - true: 使用本地 localStorage 持久化数据（生产模式）
 // - false: 使用真实数据和自动抓取（需要后端 API 支持）
-const USE_MOCK = false
+const USE_MOCK = true
 
 // 风神 API 基础路径（根据实际项目配置）
 // 请将此处替换为您真实的风神数据接口地址
@@ -205,9 +289,14 @@ export async function getAdsConfig(): Promise<AdsConfigResponse> {
 
 /**
  * 获取项目列表
- * GET /api/dashboard/projects
  */
 export async function getProjects(): Promise<ProjectListResponse> {
+  if (await useFirebase()) {
+    await delay(400)
+    const data = await getFromFirebase<ProjectItem>('projects')
+    return { success: true, data: migrateProjects(data) }
+  }
+  
   if (USE_MOCK) {
     await delay(400)
     return { success: true, data: localProjects }
@@ -218,18 +307,24 @@ export async function getProjects(): Promise<ProjectListResponse> {
 
 /**
  * 创建新项目
- * POST /api/dashboard/projects
  */
 export async function createProject(data: ProjectFormData): Promise<{ success: boolean; data: ProjectItem }> {
+  const now = new Date().toISOString()
+  const newProject: ProjectItem = {
+    id: `p_${Date.now()}`,
+    ...data,
+    updatedAt: now,
+    createdAt: now,
+  }
+
+  if (await useFirebase()) {
+    await delay(300)
+    const savedProject = await saveToFirebase('projects', newProject)
+    return { success: true, data: savedProject }
+  }
+
   if (USE_MOCK) {
     await delay(300)
-    const now = new Date().toISOString()
-    const newProject: ProjectItem = {
-      id: `p_${Date.now()}`,
-      ...data,
-      updatedAt: now,
-      createdAt: now,
-    }
     localProjects = [newProject, ...localProjects]
     saveToStorage(STORAGE_KEYS.projects, localProjects)
     return { success: true, data: newProject }
@@ -244,13 +339,23 @@ export async function createProject(data: ProjectFormData): Promise<{ success: b
 
 /**
  * 更新项目
- * PUT /api/dashboard/projects/:id
  */
 export async function updateProject(id: string, data: ProjectFormData): Promise<{ success: boolean; data: ProjectItem }> {
+  const updateData = { ...data, updatedAt: new Date().toISOString() }
+
+  if (await useFirebase()) {
+    await delay(300)
+    await updateInFirebase('projects', id, updateData)
+    // 从 Firebase 重新获取更新后的项目
+    const allProjects = await getFromFirebase<ProjectItem>('projects')
+    const updated = allProjects.find((p) => p.id === id)!
+    return { success: true, data: updated }
+  }
+
   if (USE_MOCK) {
     await delay(300)
     localProjects = localProjects.map((p) =>
-      p.id === id ? { ...p, ...data, updatedAt: new Date().toISOString() } : p
+      p.id === id ? { ...p, ...updateData } : p
     )
     saveToStorage(STORAGE_KEYS.projects, localProjects)
     const updated = localProjects.find((p) => p.id === id)!
@@ -266,9 +371,14 @@ export async function updateProject(id: string, data: ProjectFormData): Promise<
 
 /**
  * 删除项目
- * DELETE /api/dashboard/projects/:id
  */
 export async function deleteProject(id: string): Promise<{ success: boolean }> {
+  if (await useFirebase()) {
+    await delay(200)
+    await deleteFromFirebase('projects', id)
+    return { success: true }
+  }
+
   if (USE_MOCK) {
     await delay(200)
     localProjects = localProjects.filter((p) => p.id !== id)
@@ -608,9 +718,15 @@ async function fetchRealNews(category: NewsCategory): Promise<NewsItem[]> {
 
 /**
  * 获取指定日期的 Todo 列表
- * GET /api/dashboard/todos?date=:date
  */
 export async function getTodos(date: string): Promise<TodoListResponse> {
+  if (await useFirebase()) {
+    await delay(300)
+    const allTodos = await getFromFirebase<TodoItem>('todos')
+    const data = allTodos.filter((t) => t.date === date)
+    return { success: true, data }
+  }
+  
   if (USE_MOCK) {
     await delay(300)
     const data = localTodos.filter((t) => t.date === date)
@@ -622,18 +738,24 @@ export async function getTodos(date: string): Promise<TodoListResponse> {
 
 /**
  * 创建新 Todo
- * POST /api/dashboard/todos
  */
 export async function createTodo(data: TodoFormData): Promise<{ success: boolean; data: TodoItem }> {
+  const now = new Date().toISOString()
+  const newTodo: TodoItem = {
+    id: `t_${Date.now()}`,
+    ...data,
+    updatedAt: now,
+    createdAt: now,
+  }
+
+  if (await useFirebase()) {
+    await delay(300)
+    const savedTodo = await saveToFirebase('todos', newTodo)
+    return { success: true, data: savedTodo }
+  }
+
   if (USE_MOCK) {
     await delay(300)
-    const now = new Date().toISOString()
-    const newTodo: TodoItem = {
-      id: `t_${Date.now()}`,
-      ...data,
-      updatedAt: now,
-      createdAt: now,
-    }
     localTodos = [newTodo, ...localTodos]
     saveToStorage(STORAGE_KEYS.todos, localTodos)
     return { success: true, data: newTodo }
@@ -648,13 +770,22 @@ export async function createTodo(data: TodoFormData): Promise<{ success: boolean
 
 /**
  * 更新 Todo
- * PUT /api/dashboard/todos/:id
  */
 export async function updateTodo(id: string, data: TodoFormData): Promise<{ success: boolean; data: TodoItem }> {
+  const updateData = { ...data, updatedAt: new Date().toISOString() }
+
+  if (await useFirebase()) {
+    await delay(300)
+    await updateInFirebase('todos', id, updateData)
+    const allTodos = await getFromFirebase<TodoItem>('todos')
+    const updated = allTodos.find((t) => t.id === id)!
+    return { success: true, data: updated }
+  }
+
   if (USE_MOCK) {
     await delay(300)
     localTodos = localTodos.map((t) =>
-      t.id === id ? { ...t, ...data, updatedAt: new Date().toISOString() } : t
+      t.id === id ? { ...t, ...updateData } : t
     )
     saveToStorage(STORAGE_KEYS.todos, localTodos)
     const updated = localTodos.find((t) => t.id === id)!
@@ -670,13 +801,22 @@ export async function updateTodo(id: string, data: TodoFormData): Promise<{ succ
 
 /**
  * 更新 Todo 状态
- * PATCH /api/dashboard/todos/:id/status
  */
 export async function updateTodoStatus(id: string, statusData: TodoStatusUpdate): Promise<{ success: boolean; data: TodoItem }> {
+  const updateData = { ...statusData, updatedAt: new Date().toISOString() }
+
+  if (await useFirebase()) {
+    await delay(200)
+    await updateInFirebase('todos', id, updateData)
+    const allTodos = await getFromFirebase<TodoItem>('todos')
+    const updated = allTodos.find((t) => t.id === id)!
+    return { success: true, data: updated }
+  }
+
   if (USE_MOCK) {
     await delay(200)
     localTodos = localTodos.map((t) =>
-      t.id === id ? { ...t, ...statusData, updatedAt: new Date().toISOString() } : t
+      t.id === id ? { ...t, ...updateData } : t
     )
     saveToStorage(STORAGE_KEYS.todos, localTodos)
     const updated = localTodos.find((t) => t.id === id)!
@@ -692,9 +832,14 @@ export async function updateTodoStatus(id: string, statusData: TodoStatusUpdate)
 
 /**
  * 删除 Todo
- * DELETE /api/dashboard/todos/:id
  */
 export async function deleteTodo(id: string): Promise<{ success: boolean }> {
+  if (await useFirebase()) {
+    await delay(200)
+    await deleteFromFirebase('todos', id)
+    return { success: true }
+  }
+
   if (USE_MOCK) {
     await delay(200)
     localTodos = localTodos.filter((t) => t.id !== id)
