@@ -473,8 +473,15 @@ export function AdsSummaryPanel() {
   // 显示模式：custom = 自定义卡片，embed = 直接嵌入风神仪表盘
   const [displayMode, setDisplayMode] = useState<'custom' | 'embed'>('embed');
   
-  // 真实风神仪表盘地址
-  const FENGSHEN_DASHBOARD_URL = 'https://data.bytedance.net/aeolus/pages/dashboard/1510451?appId=1128&sheetId=2112164&snapshotId=1184035';
+  // 当前选中的仪表盘类型
+  const [dashboardType, setDashboardType] = useState<'daily' | 'weekly' | 'realtime'>('daily');
+  
+  // 三个风神仪表盘地址
+  const DASHBOARD_URLS = {
+    daily: 'https://data.bytedance.net/aeolus/pages/dashboard/1510451?appId=1128&sheetId=2112164&snapshotId=1184035',
+    weekly: 'https://data.bytedance.net/aeolus/pages/dashboard/1627430?appId=1128&sheetId=2320850&snapshotId=1184827',
+    realtime: 'https://data.bytedance.net/aeolus/pages/dashboard/1557333?appId=1002633&isDefault=1&sheetId=2196108&snapshotId=1184828'
+  };
 
   const fetchData = useCallback(async (isRefresh = false) => {
     try {
@@ -561,7 +568,41 @@ export function AdsSummaryPanel() {
         title="投流数据播报"
         subtitle={data && data.date ? '数据日期：' + data.date : ''}
         action={
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* 仪表盘类型切换 */}
+            <div className="flex items-center bg-gray-100 rounded-lg p-0.5">
+              <button
+                onClick={() => setDashboardType('daily')}
+                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
+                  dashboardType === 'daily'
+                    ? 'bg-white text-blue-600 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                日报
+              </button>
+              <button
+                onClick={() => setDashboardType('weekly')}
+                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
+                  dashboardType === 'weekly'
+                    ? 'bg-white text-blue-600 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                周报
+              </button>
+              <button
+                onClick={() => setDashboardType('realtime')}
+                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
+                  dashboardType === 'realtime'
+                    ? 'bg-white text-blue-600 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                实时
+              </button>
+            </div>
+            
             {/* 显示模式切换 */}
             <div className="flex items-center bg-gray-100 rounded-lg p-0.5">
               <button
@@ -653,8 +694,8 @@ export function AdsSummaryPanel() {
               </div>
               <div className="w-full h-[1200px] rounded-lg overflow-hidden border border-gray-200">
                 <iframe
-                  src={FENGSHEN_DASHBOARD_URL}
-                  title="风神仪表盘"
+                  src={DASHBOARD_URLS[dashboardType]}
+                  title={`风神${dashboardType === 'daily' ? '日报' : dashboardType === 'weekly' ? '周报' : '实时'}仪表盘`}
                   className="w-full h-full border-0"
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                   referrerPolicy="no-referrer"
@@ -664,10 +705,10 @@ export function AdsSummaryPanel() {
               <div className="mt-3 text-center text-sm text-gray-500">
                 <p>如果仪表盘无法正常显示，请点击下方按钮在新窗口打开</p>
                 <button
-                  onClick={() => window.open(FENGSHEN_DASHBOARD_URL, '_blank')}
+                  onClick={() => window.open(DASHBOARD_URLS[dashboardType], '_blank')}
                   className="mt-2 inline-flex items-center gap-2 px-4 py-2 bg-blue-500 text-white text-sm font-medium rounded-lg hover:bg-blue-600 transition-colors"
                 >
-                  在新窗口打开风神仪表盘
+                  在新窗口打开{dashboardType === 'daily' ? '日报' : dashboardType === 'weekly' ? '周报' : '实时'}仪表盘
                 </button>
               </div>
             </div>
@@ -716,7 +757,7 @@ export function AdsSummaryPanel() {
                       </p>
                     </div>
                     <button
-                      onClick={() => window.open(FENGSHEN_DASHBOARD_URL, '_blank')}
+                      onClick={() => window.open(DASHBOARD_URLS[dashboardType], '_blank')}
                       className="px-4 py-2 bg-blue-500 text-white text-sm font-medium rounded-lg hover:bg-blue-600 transition-colors"
                     >
                       查看详情

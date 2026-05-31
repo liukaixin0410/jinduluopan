@@ -14,25 +14,27 @@ export interface NewsItem {
 
 const RSS_FEEDS = {
   ai: [
-    { url: 'https://www.technologyreview.com/feed/', name: 'MIT Technology Review' },
-    { url: 'https://feeds.feedburner.com/TechCrunch/AI', name: 'TechCrunch AI' },
-    { url: 'https://writings.stephenwolfram.com/feed/', name: 'Stephen Wolfram' },
-    { url: 'https://news.mit.edu/topic/artificial-intelligence2/feed', name: 'MIT News AI' },
-    { url: 'https://ai.googleblog.com/feeds/posts/default', name: 'Google AI Blog' },
+    { url: 'https://www.qbitai.com/feeds/all', name: '量子位' },
+    { url: 'https://www.jiqizhixin.com/rss', name: '机器之心' },
+    { url: 'https://36kr.com/feed', name: '36氪 - AI' },
+    { url: 'https://www.leiphone.com/rss', name: '雷锋网' },
+    { url: 'https://www.infoq.cn/topic/ai/rss', name: 'InfoQ AI' },
   ],
   tech: [
-    { url: 'https://techcrunch.com/feed/', name: 'TechCrunch' },
-    { url: 'https://www.theverge.com/rss/index.xml', name: 'The Verge' },
-    { url: 'https://www.wired.com/feed/rss', name: 'Wired' },
-    { url: 'https://feeds.arstechnica.com/arstechnica/technology-lab', name: 'Ars Technica' },
-    { url: 'https://www.engadget.com/rss.xml', name: 'Engadget' },
+    { url: 'https://36kr.com/feed', name: '36氪' },
+    { url: 'https://www.ifanr.com/feed', name: '爱范儿' },
+    { url: 'https://www.huxiu.com/rss', name: '虎嗅' },
+    { url: 'https://www.tmtpost.com/rss', name: '钛媒体' },
+    { url: 'https://www.leiphone.com/rss', name: '雷锋网' },
+    { url: 'https://www.infoq.cn/topic/architecture/rss', name: 'InfoQ' },
+    { url: 'https://rss.sina.com.cn/tech', name: '新浪科技' },
   ],
   finance: [
-    { url: 'https://feeds.bloomberg.com/markets.rss', name: 'Bloomberg Markets' },
-    { url: 'https://feeds.a.dj.com/rss/RSSMarketsMain.xml', name: 'WSJ Markets' },
-    { url: 'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=15839069', name: 'CNBC Finance' },
-    { url: 'https://www.ft.com/myft/rss/0e0b836e-0421-408c-ac37-75c0ebf077dc', name: 'Financial Times' },
-    { url: 'https://feeds.feedburner.com/zerohedge/feed', name: 'ZeroHedge' },
+    { url: 'https://36kr.com/feed', name: '36氪 - 财经' },
+    { url: 'https://www.huxiu.com/rss', name: '虎嗅 - 商业' },
+    { url: 'https://www.tmtpost.com/rss', name: '钛媒体 - 科技财经' },
+    { url: 'https://rss.sina.com.cn/finance', name: '新浪财经' },
+    { url: 'https://wallstreetcn.com/api/feeds/realnews', name: '华尔街见闻' },
   ],
 };
 
@@ -48,7 +50,8 @@ async function fetchFromRSS(feedUrl: string, category: string, sourceName: strin
     const feed = await parser.parseURL(feedUrl);
     const items: NewsItem[] = [];
 
-    for (let i = 0; i < Math.min(feed.items.length, 8); i++) {
+    // 从每个 RSS 源获取更多新闻
+    for (let i = 0; i < Math.min(feed.items.length, 20); i++) {
       const item = feed.items[i];
       if (!item.title || !item.link) continue;
 
@@ -209,7 +212,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const category = (req.query.category as string) || 'all';
-  const count = Math.min(Math.max(Number(req.query.count) || 20, 10), 50);
+  const count = Math.min(Math.max(Number(req.query.count) || 30, 10), 100);
 
   try {
     let news: NewsItem[] = [];
@@ -221,8 +224,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     for (const cat of categoriesToFetch) {
       const feeds = RSS_FEEDS[cat as keyof typeof RSS_FEEDS];
       if (feeds && feeds.length > 0) {
-        // 并行获取多个 RSS 源
-        const feedPromises = feeds.slice(0, 2).map(feed => 
+        // 并行获取所有 RSS 源（不再只取前2个）
+        const feedPromises = feeds.map(feed => 
           fetchFromRSS(feed.url, cat, feed.name)
         );
         
@@ -239,7 +242,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // 如果 RSS 获取成功，按时间排序并限制数量
     if (news.length > 0) {
-      news = news.sort((a, b) => 
+      // 去重：根据标题去重
+      const seenTitles = new Set<string>();
+      const uniqueNews: NewsItem[] = [];
+      
+      for (const item of news) {
+        // 使用标题的前30个字符作为去重键，避免完全相同但有细微差异的情况
+        const titleKey = item.title.slice(0, 30);
+        if (!seenTitles.has(titleKey)) {
+          seenTitles.add(titleKey);
+          uniqueNews.push(item);
+        }
+      }
+      
+      // 按时间降序排列（最新的在前）
+      news = uniqueNews.sort((a, b) => 
         new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
       );
       news = news.slice(0, count);
@@ -255,8 +272,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    // 随机打乱
-    news = news.sort(() => Math.random() - 0.5);
+    // 不再随机打乱，保持按时间降序排列
+    // news = news.sort(() => Math.random() - 0.5);
 
     res.status(200).json({
       success: true,

@@ -10,17 +10,27 @@ const USE_REAL_RSS = process.env.USE_REAL_RSS === 'true';
 
 const RSS_FEEDS = {
   ai: [
-    { url: 'https://www.technologyreview.com/feed/', name: 'MIT Technology Review' },
-    { url: 'https://feeds.feedburner.com/TechCrunch/AI', name: 'TechCrunch AI' },
-    { url: 'https://news.mit.edu/topic/artificial-intelligence2/feed', name: 'MIT News AI' },
+    { url: 'https://www.qbitai.com/feeds/all', name: '量子位' },
+    { url: 'https://www.jiqizhixin.com/rss', name: '机器之心' },
+    { url: 'https://36kr.com/feed', name: '36氪 - AI' },
+    { url: 'https://www.leiphone.com/rss', name: '雷锋网' },
+    { url: 'https://www.infoq.cn/topic/ai/rss', name: 'InfoQ AI' },
   ],
   tech: [
-    { url: 'https://techcrunch.com/feed/', name: 'TechCrunch' },
-    { url: 'https://www.theverge.com/rss/index.xml', name: 'The Verge' },
-    { url: 'https://www.wired.com/feed/rss', name: 'Wired' },
+    { url: 'https://36kr.com/feed', name: '36氪' },
+    { url: 'https://www.ifanr.com/feed', name: '爱范儿' },
+    { url: 'https://www.huxiu.com/rss', name: '虎嗅' },
+    { url: 'https://www.tmtpost.com/rss', name: '钛媒体' },
+    { url: 'https://www.leiphone.com/rss', name: '雷锋网' },
+    { url: 'https://rss.sina.com.cn/tech', name: '新浪科技' },
+    { url: 'https://www.thepaper.cn/rss_channel_25959', name: '澎湃新闻' },
   ],
   finance: [
-    { url: 'https://feeds.feedburner.com/zerohedge/feed', name: 'ZeroHedge' },
+    { url: 'https://36kr.com/feed', name: '36氪 - 财经' },
+    { url: 'https://www.huxiu.com/rss', name: '虎嗅 - 商业' },
+    { url: 'https://www.tmtpost.com/rss', name: '钛媒体 - 科技财经' },
+    { url: 'https://rss.sina.com.cn/finance', name: '新浪财经' },
+    { url: 'https://wallstreetcn.com/api/feeds/realnews', name: '华尔街见闻' },
   ],
 };
 
@@ -37,7 +47,8 @@ async function fetchFromRSS(feedUrl, category, sourceName) {
     const feed = await parser.parseURL(feedUrl);
     const items = [];
 
-    for (let i = 0; i < Math.min(feed.items.length, 8); i++) {
+    // 从每个RSS源获取更多新闻
+    for (let i = 0; i < Math.min(feed.items.length, 20); i++) {
       const item = feed.items[i];
       if (!item.title || !item.link) continue;
 
@@ -190,7 +201,7 @@ const server = http.createServer(async (req, res) => {
   
   if (parsedUrl.pathname === '/api/news') {
     const category = parsedUrl.searchParams.get('category') || 'all';
-    const count = Math.min(Math.max(Number(parsedUrl.searchParams.get('count')) || 20, 10), 50);
+    const count = Math.min(Math.max(Number(parsedUrl.searchParams.get('count')) || 30, 10), 100);
 
     try {
       let news = [];
@@ -204,7 +215,7 @@ const server = http.createServer(async (req, res) => {
         for (const cat of categoriesToFetch) {
           const feeds = RSS_FEEDS[cat];
           if (feeds && feeds.length > 0) {
-            const feedPromises = feeds.slice(0, 2).map(feed => 
+            const feedPromises = feeds.map(feed => 
               fetchFromRSS(feed.url, cat, feed.name)
             );
             
@@ -219,7 +230,20 @@ const server = http.createServer(async (req, res) => {
         }
 
         if (news.length > 0) {
-          news = news.sort((a, b) => 
+          // 去重：根据标题去重
+          const seenTitles = new Set();
+          const uniqueNews = [];
+          
+          for (const item of news) {
+            // 使用标题的前30个字符作为去重键，避免完全相同但有细微差异的情况
+            const titleKey = item.title.slice(0, 30);
+            if (!seenTitles.has(titleKey)) {
+              seenTitles.add(titleKey);
+              uniqueNews.push(item);
+            }
+          }
+          
+          news = uniqueNews.sort((a, b) => 
             new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
           );
           news = news.slice(0, count);
@@ -250,7 +274,8 @@ const server = http.createServer(async (req, res) => {
         }
       }
 
-      news = news.sort(() => Math.random() - 0.5);
+      // 不再随机打乱，保持按时间降序排列
+      // news = news.sort(() => Math.random() - 0.5);
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({

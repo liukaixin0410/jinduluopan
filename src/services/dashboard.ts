@@ -102,7 +102,7 @@ let localConfigs: DataSourceConfig[] = loadFromStorage(STORAGE_KEYS.dataSources,
 // 配置项：是否使用 mock 数据
 // - true: 使用本地 localStorage 持久化数据（生产模式）
 // - false: 使用真实数据和自动抓取（需要后端 API 支持）
-const USE_MOCK = true
+const USE_MOCK = false
 
 // 风神 API 基础路径（根据实际项目配置）
 // 请将此处替换为您真实的风神数据接口地址
@@ -577,7 +577,7 @@ function getMockNews(category: NewsCategory): NewsItem[] {
 async function fetchRealNews(category: NewsCategory): Promise<NewsItem[]> {
   try {
     console.log('Fetching from our news API...')
-    const url = `/api/news?category=${encodeURIComponent(category)}&count=25`
+    const url = `/api/news?category=${encodeURIComponent(category)}&count=100`
     
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), 8000) // 8秒超时
