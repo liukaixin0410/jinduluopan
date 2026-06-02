@@ -175,6 +175,7 @@ export interface NewsItem {
 export interface NewsListResponse {
   success: boolean
   data: NewsItem[]
+  error?: string
 }
 
 export type TodoPriority = 'high' | 'medium' | 'low'
