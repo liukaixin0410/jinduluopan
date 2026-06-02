@@ -1,19 +1,4 @@
-import type { IncomingMessage, ServerResponse } from 'http';
 import Parser from 'rss-parser';
-
-type VercelRequest = IncomingMessage & { query: Record<string, string | string[]> };
-type VercelResponse = ServerResponse;
-
-export interface NewsItem {
-  id: string;
-  title: string;
-  summary: string;
-  sourceName: string;
-  sourceUrl: string;
-  imageUrl: string;
-  category: 'ai' | 'tech' | 'finance';
-  publishedAt: string;
-}
 
 const RSS_FEEDS = {
   ai: [
@@ -71,10 +56,10 @@ const parser = new Parser({
   }
 });
 
-async function fetchFromRSS(feedUrl: string, category: string, sourceName: string): Promise<NewsItem[]> {
+async function fetchFromRSS(feedUrl, category, sourceName) {
   try {
     const feed = await parser.parseURL(feedUrl);
-    const items: NewsItem[] = [];
+    const items = [];
 
     // 从每个 RSS 源获取更多新闻
     for (let i = 0; i < Math.min(feed.items.length, 20); i++) {
@@ -112,7 +97,7 @@ async function fetchFromRSS(feedUrl: string, category: string, sourceName: strin
         sourceName: sourceName,
         sourceUrl: item.link,
         imageUrl: imageUrl,
-        category: category as 'ai' | 'tech' | 'finance',
+        category: category,
         publishedAt: item.pubDate || new Date().toISOString(),
       });
     }
@@ -125,7 +110,7 @@ async function fetchFromRSS(feedUrl: string, category: string, sourceName: strin
 }
 
 // 备用生成函数
-function generateBackupNews(category: string, count: number): NewsItem[] {
+function generateBackupNews(category, count) {
   const newsTemplates = {
     ai: [
       { title: 'AI大模型在{domain}领域取得新突破', source: 'TechCrunch' },
@@ -177,8 +162,8 @@ function generateBackupNews(category: string, count: number): NewsItem[] {
   const records = ['年内新高', '历史新高'];
   const names = ['创新科技', '智算公司'];
 
-  const templates = newsTemplates[category as keyof typeof newsTemplates] || newsTemplates.tech;
-  const news: NewsItem[] = [];
+  const templates = newsTemplates[category] || newsTemplates.tech;
+  const news = [];
 
   for (let i = 0; i < count; i++) {
     const template = templates[Math.floor(Math.random() * templates.length)];
@@ -218,7 +203,7 @@ function generateBackupNews(category: string, count: number): NewsItem[] {
       sourceName: template.source,
       sourceUrl: `https://example.com/news/${Date.now()}_${i}`,
       imageUrl: `https://picsum.photos/seed/${category}${i}${Date.now()}/800/450`,
-      category: category as 'ai' | 'tech' | 'finance',
+      category: category,
       publishedAt: new Date(Date.now() - hoursAgo * 3600000).toISOString(),
     });
   }
@@ -226,7 +211,7 @@ function generateBackupNews(category: string, count: number): NewsItem[] {
   return news;
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req, res) {
   // 设置 CORS 头
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
@@ -236,20 +221,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).end();
   }
 
-  const category = (req.query.category as string) || 'all';
+  const category = (req.query.category) || 'all';
   const count = Math.min(Math.max(Number(req.query.count) || 30, 10), 100);
 
   try {
-    let news: NewsItem[] = [];
+    let news = [];
     let usedRSS = false;
 
     // 获取分类对应的 RSS 源
     const categoriesToFetch = category === 'all' ? ['ai', 'tech', 'finance'] : [category];
     
     for (const cat of categoriesToFetch) {
-      const feeds = RSS_FEEDS[cat as keyof typeof RSS_FEEDS];
+      const feeds = RSS_FEEDS[cat];
       if (feeds && feeds.length > 0) {
-        // 并行获取所有 RSS 源（不再只取前2个）
+        // 并行获取所有 RSS 源
         const feedPromises = feeds.map(feed => 
           fetchFromRSS(feed.url, cat, feed.name)
         );
@@ -268,11 +253,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // 如果 RSS 获取成功，按时间排序并限制数量
     if (news.length > 0) {
       // 去重：根据标题去重
-      const seenTitles = new Set<string>();
-      const uniqueNews: NewsItem[] = [];
+      const seenTitles = new Set();
+      const uniqueNews = [];
       
       for (const item of news) {
-        // 使用标题的前30个字符作为去重键，避免完全相同但有细微差异的情况
+        // 使用标题的前30个字符作为去重键
         const titleKey = item.title.slice(0, 30);
         if (!seenTitles.has(titleKey)) {
           seenTitles.add(titleKey);
@@ -280,7 +265,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
       }
       
-      // 按时间降序排列（最新的在前）
+      // 按时间降序排列
       news = uniqueNews.sort((a, b) => 
         new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
       );
@@ -297,9 +282,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    // 不再随机打乱，保持按时间降序排列
-    // news = news.sort(() => Math.random() - 0.5);
-
     res.status(200).json({
       success: true,
       data: news,
@@ -310,7 +292,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.error('Error fetching news:', error);
     
     // 完全失败时的备用方案
-    let news: NewsItem[] = [];
+    let news = [];
     if (category === 'all') {
       news = [
         ...generateBackupNews('ai', 8),
