@@ -1,5 +1,8 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+import type { IncomingMessage, ServerResponse } from 'http';
 import Parser from 'rss-parser';
+
+type VercelRequest = IncomingMessage & { query: Record<string, string | string[]> };
+type VercelResponse = ServerResponse;
 
 export interface NewsItem {
   id: string;
@@ -166,7 +169,6 @@ function generateBackupNews(category: string, count: number): NewsItem[] {
   const vehicles = ['Model 3', 'Model Y', 'Cybertruck'];
   const rockets = ['Starship', 'Falcon 9', 'Starlink'];
   const models2 = ['SU7', 'YU7'];
-  const prices = ['24.59', '29.99'];
   const actions = ['降息25个基点', '维持利率'];
   const trends1 = ['上涨', '下跌'];
   const trends2 = ['走强', '稳定'];
