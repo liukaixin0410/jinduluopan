@@ -14,21 +14,13 @@ export interface NewsItem {
 
 const RSS_FEEDS = {
   ai: [
-    // 国内AI科技媒体
     { url: 'https://www.qbitai.com/feeds/all', name: '量子位' },
     { url: 'https://www.jiqizhixin.com/rss', name: '机器之心' },
     { url: 'https://36kr.com/feed', name: '36氪 - AI' },
     { url: 'https://www.leiphone.com/rss', name: '雷锋网' },
     { url: 'https://www.infoq.cn/topic/ai/rss', name: 'InfoQ AI' },
-    // 海外AI科技媒体
-    { url: 'https://www.technologyreview.com/feed', name: 'MIT Technology Review' },
-    { url: 'https://ai.googleblog.com/feeds/posts/default', name: 'Google AI Blog' },
-    { url: 'https://openai.com/blog/rss.xml', name: 'OpenAI Blog' },
-    { url: 'https://www.nature.com/nature.rss', name: 'Nature' },
-    { url: 'https://www.science.org/rss/news_current.xml', name: 'Science' },
   ],
   tech: [
-    // 国内科技媒体
     { url: 'https://36kr.com/feed', name: '36氪' },
     { url: 'https://www.ifanr.com/feed', name: '爱范儿' },
     { url: 'https://www.huxiu.com/rss', name: '虎嗅' },
@@ -36,28 +28,13 @@ const RSS_FEEDS = {
     { url: 'https://www.leiphone.com/rss', name: '雷锋网' },
     { url: 'https://www.infoq.cn/topic/architecture/rss', name: 'InfoQ' },
     { url: 'https://rss.sina.com.cn/tech', name: '新浪科技' },
-    // 海外科技媒体
-    { url: 'https://techcrunch.com/feed', name: 'TechCrunch' },
-    { url: 'https://www.theverge.com/rss/index.xml', name: 'The Verge' },
-    { url: 'https://www.wired.com/feed/rss', name: 'Wired' },
-    { url: 'https://www.cnet.com/rss/news/', name: 'CNET' },
-    { url: 'https://arstechnica.com/feeds/posts.rss', name: 'Ars Technica' },
-    { url: 'https://www.engadget.com/rss.xml', name: 'Engadget' },
-    { url: 'https://venturebeat.com/feed', name: 'VentureBeat' },
   ],
   finance: [
-    // 国内财经媒体
     { url: 'https://36kr.com/feed', name: '36氪 - 财经' },
     { url: 'https://www.huxiu.com/rss', name: '虎嗅 - 商业' },
     { url: 'https://www.tmtpost.com/rss', name: '钛媒体 - 科技财经' },
     { url: 'https://rss.sina.com.cn/finance', name: '新浪财经' },
     { url: 'https://wallstreetcn.com/api/feeds/realnews', name: '华尔街见闻' },
-    // 海外财经媒体
-    { url: 'https://feeds.bloomberg.com/markets.rss', name: 'Bloomberg' },
-    { url: 'https://feeds.a.dj.com/rss/RSSMarketsMain.xml', name: 'Wall Street Journal' },
-    { url: 'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=15839069', name: 'CNBC' },
-    { url: 'https://www.ft.com/myft/rss/0e0b836e-0421-408c-ac37-75c0ebf077dc', name: 'Financial Times' },
-    { url: 'https://feeds.feedburner.com/zerohedge/feed', name: 'ZeroHedge' },
   ],
 };
 
