@@ -419,7 +419,12 @@ export async function getNews(category: NewsCategory = 'all'): Promise<NewsListR
   try {
     // 只调用真实API（本地或线上），绝不使用mock数据
     console.log('📰 正在获取真实新闻数据...')
-    const response = await fetch(`http://localhost:3001/api/news?category=${category}&count=100`)
+    
+    // 根据环境选择API地址
+    const isLocalDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    const apiBase = isLocalDev ? 'http://localhost:3001' : ''
+    
+    const response = await fetch(`${apiBase}/api/news?category=${category}&count=100`)
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`)
     }
