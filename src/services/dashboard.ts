@@ -417,24 +417,19 @@ export async function deleteProject(id: string): Promise<{ success: boolean }> {
  */
 export async function getNews(category: NewsCategory = 'all'): Promise<NewsListResponse> {
   try {
-    // 调用本地API服务器（真实RSS抓取）
-    const response = await fetch(`http://localhost:3001/api/news?category=${category}&count=50`)
+    // 只调用真实API（本地或线上），绝不使用mock数据
+    console.log('📰 正在获取真实新闻数据...')
+    const response = await fetch(`http://localhost:3001/api/news?category=${category}&count=100`)
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`)
     }
     const result = await response.json()
-    console.log(`📰 Fetched ${result.data.length} news items from ${result.source}`)
+    console.log(`✅ 成功获取 ${result.data.length} 条真实新闻，来源: ${result.source}`)
     return { success: true, data: result.data }
   } catch (error) {
-    console.error('Failed to fetch real news:', error)
-    console.warn('⚠️ Falling back to mock news...')
-    
-    // 降级到本地mock数据
-    let data = mockNews
-    if (category !== 'all') {
-      data = mockNews.filter((n) => n.category === category)
-    }
-    return { success: true, data }
+    console.error('❌ 无法获取真实新闻数据:', error)
+    // 直接返回错误，绝不fallback到mock数据
+    return { success: false, data: [], error: '无法连接到新闻服务器，请确保本地API服务正在运行' }
   }
 }
 
