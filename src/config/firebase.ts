@@ -20,16 +20,23 @@ let initialized = false;
 export function getFirebaseDb() {
   if (!initialized) {
     try {
+      console.log('🔥 Firebase: 正在初始化...');
+      console.log('🔥 Firebase 项目:', firebaseConfig.projectId);
       app = initializeApp(firebaseConfig);
       db = getFirestore(app);
-      console.log('Firebase 初始化成功');
+      console.log('✅ Firebase 初始化成功，数据库已连接');
     } catch (error) {
-      console.warn('Firebase 初始化失败:', error);
+      console.error('❌ Firebase 初始化失败:', error);
       db = null;
     }
     initialized = true;
   }
   return db;
+}
+
+// 手动初始化函数（可以在应用启动时调用）
+export async function initFirebase() {
+  return getFirebaseDb();
 }
 
 export default app;
