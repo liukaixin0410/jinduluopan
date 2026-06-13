@@ -11,10 +11,14 @@
     "vercel-dev": "vercel dev",
     "api": "node local-api-server.js",
     "api:rss": "USE_REAL_RSS=true node local-api-server.js",
-    "dev:full": "npm run api:rss & npm run dev"
+    "dev:full": "npm run api:rss & npm run dev",
+    "start": "node server.js",
+    "serve": "node server.js",
+    "deploy": "npm run build && node server.js"
   },
   "dependencies": {
     "clsx": "^2.1.0",
+    "express": "^5.2.1",
     "firebase": "^12.14.0",
     "lucide-react": "^0.344.0",
     "react": "^18.2.0",

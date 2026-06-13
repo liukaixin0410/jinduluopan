@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Calendar, ExternalLink, Search, Sparkles, TrendingUp, TrendingDown, Minus, CheckCircle, AlertCircle, Clock, Target, User, ChevronRight, Settings, Plus, RefreshCw } from 'lucide-react'
-import { mockUpdates } from '../mockData'
 import { Update, ProgressStatus, POCStatus } from '../types'
+import { getProjects } from '../services/dashboard'
+import type { ProjectItem } from '../types/dashboard'
 import { useDataSources } from '../context/DataSourceContext'
 import { useNavigate } from 'react-router-dom'
 import { clsx } from 'clsx'
@@ -41,23 +42,94 @@ export function Team() {
   const [filter, setFilter] = useState<'all' | 'high' | 'medium' | 'low'>('all')
   const [statusFilter, setStatusFilter] = useState<'all' | ProgressStatus>('all')
   const [search, setSearch] = useState('')
+  const [projects, setProjects] = useState<ProjectItem[]>([])
+  const [projectsLoading, setProjectsLoading] = useState(true)
   const navigate = useNavigate()
-  const { updates, dataSources, syncAllDataSources, isSyncing } = useDataSources()
+  const { dataSources, syncAllDataSources, isSyncing } = useDataSources()
 
-  const displayUpdates = updates.length > 0 ? updates : mockUpdates
+  useEffect(() => {
+    let cancelled = false
+    setProjectsLoading(true)
+    getProjects()
+      .then((res) => {
+        if (cancelled) return
+        if (res && res.success && Array.isArray(res.data)) {
+          setProjects(res.data)
+        } else {
+          setProjects([])
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setProjects([])
+      })
+      .finally(() => {
+        if (!cancelled) setProjectsLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const mapProjectToUpdate = (p: ProjectItem): Update => {
+    const importance: 'high' | 'medium' | 'low' = (p.priority === 'high' || p.priority === 'medium' || p.priority === 'low')
+      ? p.priority
+      : 'medium'
+
+    let status: ProgressStatus = 'on-track'
+    switch (p.status) {
+      case 'at_risk':
+        status = 'at-risk'
+        break
+      case 'completed':
+        status = 'completed'
+        break
+      case 'not_started':
+      case 'in_progress':
+      case 'paused':
+      default:
+        status = 'on-track'
+        break
+    }
+
+    const assignee = p.collaborators && p.collaborators.length > 0 ? p.collaborators[0] : ''
+
+    return {
+      id: p.id,
+      sourceType: 'document',
+      time: p.startDate,
+      summary: p.goal,
+      importance,
+      affectedObjects: [p.name],
+      suggestedAction: '',
+      sourceLink: '',
+      title: p.name,
+      status,
+      lastUpdate: p.endDate || p.updatedAt,
+      assignee,
+      progress: Number(p.progress) || 0,
+      milestones: [],
+      metrics: [],
+      relatedModules: [p.detail || '项目'],
+      content: p.currentTask,
+    } as unknown as Update
+  }
+
+  const displayUpdates: Update[] = projects.map(mapProjectToUpdate)
 
   const filteredUpdates = displayUpdates.filter(update => {
     const matchesImportance = filter === 'all' || update.importance === filter
     const matchesStatus = statusFilter === 'all' || update.status === statusFilter
-    const matchesSearch = !search || 
-      update.title.toLowerCase().includes(search.toLowerCase()) || 
+    const matchesSearch = !search ||
+      update.title.toLowerCase().includes(search.toLowerCase()) ||
       update.summary.toLowerCase().includes(search.toLowerCase())
     return matchesImportance && matchesStatus && matchesSearch
   })
 
-  const handleCardClick = (update: Update) => {
-    console.log('进入业务模块:', update.title)
+  const handleCardClick = (_update: Update) => {
+    // no-op
   }
+
+  void projectsLoading
 
   return (
     <div className="min-h-screen bg-[#F7F8FC] p-6 pb-12">

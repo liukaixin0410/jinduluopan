@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
 import { Send, Bot, User, Sparkles, FileText, TrendingUp, CheckSquare, Calendar, Copy } from 'lucide-react'
-import { mockMessages } from '../mockData'
 import { clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
 
@@ -15,11 +14,29 @@ const quickActions = [
   { label: '今日日程', icon: Calendar }
 ]
 
+interface ChatMessage {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  timestamp: string
+}
+
 export function Assistant() {
-  const [messages, setMessages] = useState(mockMessages)
+  const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
   const [isTyping, setIsTyping] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    setMessages([
+      {
+        id: 'welcome',
+        role: 'assistant',
+        content: '你好！我是你的 AI 助手，有什么可以帮你的？',
+        timestamp: new Date().toLocaleString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+      },
+    ])
+  }, [])
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -32,7 +49,7 @@ export function Assistant() {
   const handleSend = async (text: string = input) => {
     if (!text.trim()) return
 
-    const userMessage = {
+    const userMessage: ChatMessage = {
       id: Date.now().toString(),
       role: 'user' as const,
       content: text,
@@ -50,8 +67,8 @@ export function Assistant() {
         '关于你关注的AI领域大事，最近OpenAI发布了GPT-5，这可能会影响我们产品的AI能力规划，建议持续关注。',
         '今日建议：先查看设计稿并给出反馈（明天截止），然后继续完成PRD评审（周五截止）。这两个是最紧急的任务。'
       ]
-      
-      const assistantMessage = {
+
+      const assistantMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
         role: 'assistant' as const,
         content: responses[Math.floor(Math.random() * responses.length)],

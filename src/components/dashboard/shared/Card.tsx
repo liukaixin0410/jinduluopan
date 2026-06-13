@@ -1,10 +1,21 @@
 import { clsx, type ClassValue } from 'clsx'
 import { twMerge } from 'tailwind-merge'
+import {
+  RefreshCw,
+  Inbox,
+  AlertCircle,
+  Search,
+  Check,
+  X,
+} from 'lucide-react'
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+/* ===========================================================
+   Card - Primary content container
+   =========================================================== */
 interface CardProps {
   children: React.ReactNode
   className?: string
@@ -18,12 +29,18 @@ export function Card({ children, className, contentClassName, title, subtitle, a
   return (
     <div className={cn('card-container', className)}>
       {(title || subtitle || action) && (
-        <div className='card-header flex items-center justify-between'>
-          <div>
-            {title && <h3 className='text-lg font-semibold text-gray-900 leading-tight'>{title}</h3>}
-            {subtitle && <p className='text-sm text-gray-500 mt-1 leading-relaxed'>{subtitle}</p>}
+        <div className="card-header flex items-start justify-between gap-4">
+          <div className="min-w-0 flex-1">
+            {title && (
+              <h3 className="text-base font-semibold text-slate-900 tracking-tight leading-tight">
+                {title}
+              </h3>
+            )}
+            {subtitle && (
+              <p className="text-sm text-slate-500 mt-1 leading-relaxed">{subtitle}</p>
+            )}
           </div>
-          {action && <div className='flex items-center gap-3'>{action}</div>}
+          {action && <div className="flex items-center gap-2 flex-shrink-0">{action}</div>}
         </div>
       )}
       <div className={cn('card-content', contentClassName)}>{children}</div>
@@ -31,75 +48,9 @@ export function Card({ children, className, contentClassName, title, subtitle, a
   )
 }
 
-interface SkeletonProps {
-  className?: string
-}
-
-export function Skeleton({ className }: SkeletonProps) {
-  return (
-    <div className={cn('animate-pulse bg-gray-100 rounded-lg', className)} />
-  )
-}
-
-interface LoadingStateProps {
-  message?: string
-}
-
-export function LoadingState({ message = '数据加载中...' }: LoadingStateProps) {
-  return (
-    <div className='flex flex-col items-center justify-center py-16'>
-      <div className='w-10 h-10 border-4 border-blue-100 border-t-blue-600 rounded-full animate-spin' />
-      <p className='mt-4 text-gray-500 text-sm'>{message}</p>
-    </div>
-  )
-}
-
-interface EmptyStateProps {
-  message: string
-  description?: string
-  icon?: React.ReactNode
-  action?: React.ReactNode
-}
-
-export function EmptyState({ message, description, icon, action }: EmptyStateProps) {
-  return (
-    <div className='flex flex-col items-center justify-center py-16 text-center'>
-      {icon && <div className='text-gray-200 mb-5'>{icon}</div>}
-      <h4 className='text-gray-900 font-medium text-base'>{message}</h4>
-      {description && <p className='text-gray-500 text-sm mt-2 leading-relaxed'>{description}</p>}
-      {action && <div className='mt-5'>{action}</div>}
-    </div>
-  )
-}
-
-interface ErrorStateProps {
-  message?: string
-  description?: string
-  onRetry?: () => void
-}
-
-export function ErrorState({ message = '加载失败', description = '请稍后重试', onRetry }: ErrorStateProps) {
-  return (
-    <div className='flex flex-col items-center justify-center py-16 text-center'>
-      <div className='w-14 h-14 bg-red-50 rounded-full flex items-center justify-center text-red-500 mb-5'>
-        <svg className='w-7 h-7' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-          <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z' />
-        </svg>
-      </div>
-      <p className='text-gray-900 font-medium text-base'>{message}</p>
-      <p className='text-gray-500 text-sm mt-2'>{description}</p>
-      {onRetry && (
-        <button
-          onClick={onRetry}
-          className='mt-5 btn-primary px-5 py-2.5 text-sm'
-        >
-          重试
-        </button>
-      )}
-    </div>
-  )
-}
-
+/* ===========================================================
+   Button
+   =========================================================== */
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'secondary' | 'danger' | 'ghost'
   size?: 'sm' | 'md' | 'lg'
@@ -114,59 +65,189 @@ export function Button({
   loading = false,
   ...props
 }: ButtonProps) {
-  const variants = {
+  const variants: Record<string, string> = {
     primary: 'btn-primary',
     secondary: 'btn-secondary',
-    danger: 'bg-red-50 text-red-600 hover:bg-red-100 border border-red-100',
+    danger: 'btn-danger',
     ghost: 'btn-ghost',
   }
 
-  const sizes = {
-    sm: 'px-3 py-1.5 text-sm',
-    md: 'px-4 py-2 text-sm',
-    lg: 'px-6 py-3 text-base',
+  const sizes: Record<string, string> = {
+    sm: '!px-3 !py-1.5 !text-xs',
+    md: '',
+    lg: '!px-6 !py-2.5 !text-base',
   }
 
   return (
     <button
-      className={cn(
-        'inline-flex items-center justify-center rounded-lg font-medium transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none',
-        variants[variant],
-        sizes[size],
-        className
-      )}
+      className={cn(variants[variant], sizes[size], className)}
       disabled={loading || props.disabled}
       {...props}
     >
-      {loading ? (
-        <svg className='w-4 h-4 mr-2 animate-spin' fill='none' viewBox='0 0 24 24'>
-          <circle className='opacity-25' cx='12' cy='12' r='10' stroke='currentColor' strokeWidth='4'></circle>
-          <path className='opacity-75' fill='currentColor' d='M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z'></path>
-        </svg>
-      ) : null}
+      {loading && <RefreshCw className="w-4 h-4 animate-spin" />}
       {children}
     </button>
   )
 }
 
+/* ===========================================================
+   Badge
+   =========================================================== */
 interface BadgeProps {
   children: React.ReactNode
   color?: 'gray' | 'blue' | 'green' | 'orange' | 'red' | 'purple'
+  className?: string
 }
 
-export function Badge({ children, color = 'gray' }: BadgeProps) {
-  const colors = {
-    gray: 'bg-gray-100 text-gray-700',
-    blue: 'bg-blue-50 text-blue-700',
-    green: 'bg-green-50 text-green-700',
-    orange: 'bg-orange-50 text-orange-700',
-    red: 'bg-red-50 text-red-700',
-    purple: 'bg-purple-50 text-purple-700',
+export function Badge({ children, color = 'gray', className }: BadgeProps) {
+  const colors: Record<string, string> = {
+    gray: 'badge-gray',
+    blue: 'badge-blue',
+    green: 'badge-green',
+    orange: 'badge-orange',
+    red: 'badge-red',
+    purple: 'badge-purple',
   }
+  return <span className={cn(colors[color], className)}>{children}</span>
+}
 
+/* ===========================================================
+   Skeleton - Loading placeholders
+   =========================================================== */
+interface SkeletonProps {
+  className?: string
+}
+
+export function Skeleton({ className }: SkeletonProps) {
   return (
-    <span className={cn('inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium', colors[color])}>
-      {children}
-    </span>
+    <div
+      className={cn(
+        'relative overflow-hidden rounded-lg bg-slate-100',
+        'before:absolute before:inset-0 before:-translate-x-full before:animate-shimmer',
+        'before:bg-gradient-to-r before:from-transparent before:via-white/60 before:to-transparent',
+        className
+      )}
+    />
   )
 }
+
+/* ===========================================================
+   Loading State
+   =========================================================== */
+interface LoadingStateProps {
+  message?: string
+}
+
+export function LoadingState({ message = '加载中...' }: LoadingStateProps) {
+  return (
+    <div className="flex flex-col items-center justify-center py-16">
+      <div className="relative">
+        <div className="w-10 h-10 rounded-full border-2 border-slate-200" />
+        <div className="absolute inset-0 w-10 h-10 rounded-full border-2 border-transparent border-t-primary-500 animate-spin" />
+      </div>
+      <p className="mt-4 text-sm text-slate-500">{message}</p>
+    </div>
+  )
+}
+
+/* ===========================================================
+   Empty State
+   =========================================================== */
+interface EmptyStateProps {
+  message: string
+  description?: string
+  icon?: React.ReactNode
+  action?: React.ReactNode
+}
+
+export function EmptyState({ message, description, icon, action }: EmptyStateProps) {
+  return (
+    <div className="flex flex-col items-center justify-center py-16 text-center animate-fade-in">
+      <div className="relative mb-5">
+        <div className="w-16 h-16 rounded-2xl bg-slate-50 flex items-center justify-center">
+          {icon || <Inbox className="w-8 h-8 text-slate-300" strokeWidth={1.5} />}
+        </div>
+      </div>
+      <h4 className="text-slate-900 font-semibold text-base">{message}</h4>
+      {description && (
+        <p className="text-slate-500 text-sm mt-1.5 leading-relaxed max-w-sm">{description}</p>
+      )}
+      {action && <div className="mt-5">{action}</div>}
+    </div>
+  )
+}
+
+/* ===========================================================
+   Error State
+   =========================================================== */
+interface ErrorStateProps {
+  message?: string
+  description?: string
+  onRetry?: () => void
+}
+
+export function ErrorState({ message = '加载失败', description = '请稍后重试', onRetry }: ErrorStateProps) {
+  return (
+    <div className="flex flex-col items-center justify-center py-16 text-center animate-fade-in">
+      <div className="w-14 h-14 rounded-2xl bg-red-50 flex items-center justify-center text-red-500 mb-5">
+        <AlertCircle className="w-7 h-7" strokeWidth={2} />
+      </div>
+      <p className="text-slate-900 font-semibold text-base">{message}</p>
+      <p className="text-slate-500 text-sm mt-1.5">{description}</p>
+      {onRetry && (
+        <Button variant="secondary" onClick={onRetry} className="mt-5">
+          <RefreshCw className="w-4 h-4" />
+          重试
+        </Button>
+      )}
+    </div>
+  )
+}
+
+/* ===========================================================
+   Icon Button - Small circular action
+   =========================================================== */
+interface IconButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+  children: React.ReactNode
+}
+
+export function IconButton({ children, className, ...props }: IconButtonProps) {
+  return (
+    <button
+      className={cn(
+        'inline-flex items-center justify-center w-9 h-9 rounded-xl',
+        'text-slate-500 hover:bg-slate-100 hover:text-slate-700',
+        'focus:outline-none focus:ring-2 focus:ring-slate-200',
+        'disabled:opacity-50 disabled:pointer-events-none',
+        'transition-all duration-200',
+        className
+      )}
+      {...props}
+    >
+      {children}
+    </button>
+  )
+}
+
+/* ===========================================================
+   Section Title - For content sections within cards
+   =========================================================== */
+interface SectionTitleProps {
+  title: string
+  action?: React.ReactNode
+  className?: string
+}
+
+export function SectionTitle({ title, action, className }: SectionTitleProps) {
+  return (
+    <div className={cn('flex items-center justify-between mb-3', className)}>
+      <h4 className="text-sm font-semibold text-slate-700">{title}</h4>
+      {action}
+    </div>
+  )
+}
+
+/* ===========================================================
+   Icon helpers (re-export lucide icons commonly needed)
+   =========================================================== */
+export { Check, X, Search, RefreshCw }

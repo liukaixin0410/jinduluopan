@@ -1,0 +1,12 @@
+version: '3.8'
+
+services:
+  jinduluopan:
+    build: .
+    container_name: jinduluopan
+    restart: unless-stopped
+    ports:
+      - "80:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000

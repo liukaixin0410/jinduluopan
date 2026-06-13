@@ -1,288 +1,269 @@
 import { useCallback, useEffect, useState } from 'react'
+import { RefreshCw, Clock, ExternalLink, Sparkles } from 'lucide-react'
+import { Card, Skeleton, ErrorState, Button } from './shared/Card'
 import { getNews } from '../../services/dashboard'
 import type { NewsItem, NewsCategory } from '../../types/dashboard'
-import { Card, ErrorState, EmptyState, Skeleton } from './shared/Card'
 
-// NewsCard 组件
-interface NewsCardProps {
-  news: NewsItem
+const NEWS_DISPLAY_LIMIT = 30
+
+/* ===========================================================
+   Utilities
+   =========================================================== */
+const categoryConfig: Record<NewsCategory, { label: string; gradient: string; emoji: string }> = {
+  all: { label: '全部', gradient: 'from-slate-500 to-slate-600', emoji: '📰' },
+  ai: { label: 'AI', gradient: 'from-violet-500 to-accent-600', emoji: '🤖' },
+  tech: { label: '科技', gradient: 'from-primary-500 to-cyan-600', emoji: '💻' },
+  finance: { label: '金融', gradient: 'from-emerald-500 to-teal-600', emoji: '📈' },
 }
 
-function NewsCard({ news }: NewsCardProps) {
-  const [imageError, setImageError] = useState(false)
+function formatTimeAgo(dateStr: string): string {
+  const now = new Date()
+  const diff = now.getTime() - new Date(dateStr).getTime()
+  const hours = Math.floor(diff / (1000 * 60 * 60))
+  if (hours < 1) return '刚刚'
+  if (hours < 24) return `${hours} 小时前`
+  const days = Math.floor(hours / 24)
+  return `${days} 天前`
+}
 
-  const formatDate = (dateStr: string) => {
-    const d = new Date(dateStr)
-    const now = new Date()
-    const diff = now.getTime() - d.getTime()
-    const hours = Math.floor(diff / (1000 * 60 * 60))
-    if (hours < 1) return '刚刚'
-    if (hours < 24) return `${hours}小时前`
-    const days = Math.floor(hours / 24)
-    return `${days}天前`
-  }
+/* ===========================================================
+   Filter Tabs
+   =========================================================== */
+function FilterTabs({
+  current,
+  onChange,
+}: {
+  current: NewsCategory
+  onChange: (c: NewsCategory) => void
+}) {
+  const tabs: NewsCategory[] = ['all', 'ai', 'tech', 'finance']
 
-  const getCategoryConfig = (category: string) => {
-    const configs: Record<string, { gradient: string; icon: string; label: string }> = {
-      ai: {
-        gradient: 'from-violet-500 via-purple-500 to-indigo-600',
-        icon: '🤖',
-        label: 'AI资讯',
-      },
-      tech: {
-        gradient: 'from-blue-500 via-cyan-500 to-teal-600',
-        icon: '💻',
-        label: '科技新闻',
-      },
-      finance: {
-        gradient: 'from-emerald-500 via-green-500 to-teal-600',
-        icon: '📈',
-        label: '金融动态',
-      },
-    }
-    return configs[category] || configs.tech
-  }
+  return (
+    <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-xl">
+      {tabs.map((tab) => {
+        const isActive = current === tab
+        return (
+          <button
+            key={tab}
+            onClick={() => onChange(tab)}
+            className={[
+              'px-3.5 py-1.5 rounded-lg text-sm font-medium transition-all duration-200',
+              isActive
+                ? 'bg-white text-slate-900 shadow-sm'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-white/60',
+            ].join(' ')}
+          >
+            {categoryConfig[tab].label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
 
-  const config = getCategoryConfig(news.category)
+/* ===========================================================
+   News Card
+   =========================================================== */
+function NewsCard({ item }: { item: NewsItem }) {
+  const cfg = categoryConfig[item.category]
 
   return (
     <a
-      href={news.sourceUrl}
-      target='_blank'
-      rel='noopener noreferrer'
-      className='group block bg-white rounded-xl overflow-hidden border border-gray-100 hover:border-gray-200 hover:shadow-lg transition-all duration-300'
+      href={item.sourceUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="group block rounded-2xl bg-white border border-slate-200 overflow-hidden hover:shadow-float hover:-translate-y-0.5 hover:border-slate-300 transition-all duration-300"
     >
-      <div className='aspect-[16/9] relative overflow-hidden'>
-        {news.imageUrl && !imageError ? (
+      {/* Image / Gradient Header */}
+      <div className="aspect-[16/9] relative overflow-hidden">
+        {item.imageUrl ? (
           <img
-            src={news.imageUrl}
-            alt={news.title}
-            className='w-full h-full object-cover transition-transform duration-500 group-hover:scale-105'
-            onError={() => setImageError(true)}
-            loading='lazy'
+            src={item.imageUrl}
+            alt={item.title}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+            loading="lazy"
           />
         ) : (
-          <div className={`w-full h-full bg-gradient-to-br ${config.gradient} flex items-center justify-center`}>
-            <div className='text-white text-center p-4'>
-              <div className='text-5xl mb-3 drop-shadow-lg'>{config.icon}</div>
-              <div className='text-sm font-medium opacity-90 backdrop-blur-sm bg-white/20 px-3 py-1 rounded-full'>{config.label}</div>
-            </div>
+          <div className={`w-full h-full bg-gradient-to-br ${cfg.gradient} flex items-center justify-center relative overflow-hidden`}>
+            <div className="absolute -top-6 -right-6 w-24 h-24 bg-white/10 rounded-full blur-2xl" />
+            <div className="absolute -bottom-8 -left-4 w-20 h-20 bg-white/10 rounded-full blur-2xl" />
+            <span className="text-5xl drop-shadow-lg">{cfg.emoji}</span>
           </div>
         )}
-        <div className='absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent' />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent" />
+        <span className="absolute top-3 left-3 text-xs font-semibold text-white bg-black/30 backdrop-blur-sm px-2.5 py-1 rounded-full">
+          {cfg.label}
+        </span>
       </div>
-      <div className='p-5'>
-        <h4 className='text-base font-semibold text-gray-900 line-clamp-2 group-hover:text-blue-600 transition-colors leading-snug'>
-          {news.title}
+
+      {/* Body */}
+      <div className="p-4">
+        <h4 className="text-sm font-semibold text-slate-900 leading-snug line-clamp-2 group-hover:text-primary-700 transition-colors">
+          {item.title}
         </h4>
-        <p className='mt-3 text-sm text-gray-500 line-clamp-2 leading-relaxed'>
-          {news.summary}
+        <p className="mt-2 text-xs text-slate-500 leading-relaxed line-clamp-2">
+          {item.summary}
         </p>
-        <div className='mt-4 flex items-center justify-between text-xs text-gray-400'>
-          <span className='font-medium'>{news.sourceName}</span>
-          <span>{formatDate(news.publishedAt)}</span>
+        <div className="mt-3 flex items-center justify-between text-xs text-slate-400">
+          <span className="font-medium text-slate-500">{item.sourceName}</span>
+          <span className="flex items-center gap-1">
+            <Clock className="w-3 h-3" strokeWidth={2} />
+            {formatTimeAgo(item.publishedAt)}
+          </span>
         </div>
       </div>
     </a>
   )
 }
 
-// NewsFilterTabs 组件
-interface NewsFilterTabsProps {
-  current: NewsCategory
-  onChange: (category: NewsCategory) => void
-}
-
-function NewsFilterTabs({ current, onChange }: NewsFilterTabsProps) {
-  const tabs: { id: NewsCategory; label: string }[] = [
-    { id: 'all', label: '全部' },
-    { id: 'ai', label: 'AI' },
-    { id: 'tech', label: '科技' },
-    { id: 'finance', label: '金融' },
-  ]
-
-  return (
-    <div className='flex items-center gap-1 bg-gray-50 p-1 rounded-lg'>
-      {tabs.map((tab) => (
-        <button
-          key={tab.id}
-          onClick={() => onChange(tab.id)}
-          className={`px-4 py-2 text-sm font-medium rounded-md transition-all duration-200 ${
-            current === tab.id
-              ? 'bg-white text-blue-700 shadow-sm'
-              : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-          }`}
-        >
-          {tab.label}
-        </button>
-      ))}
-    </div>
-  )
-}
-
-// NewsGrid 组件
-interface NewsGridProps {
-  news: NewsItem[]
-}
-
-function NewsGrid({ news }: NewsGridProps) {
-  return (
-    <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6'>
-      {news.map((item) => (
-        <NewsCard key={item.id} news={item} />
-      ))}
-    </div>
-  )
-}
-
-// NewsSkeleton 组件
-function NewsSkeleton() {
-  return (
-    <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6'>
-      {[...Array(6)].map((_, i) => (
-        <div key={i} className='bg-white rounded-xl border border-gray-100 overflow-hidden'>
-          <Skeleton className='h-48' />
-          <div className='p-5 space-y-4'>
-            <div className='space-y-2'>
-              <Skeleton className='h-5 w-full' />
-              <Skeleton className='h-5 w-5/6' />
-            </div>
-            <div className='space-y-2'>
-              <Skeleton className='h-4 w-full' />
-              <Skeleton className='h-4 w-4/5' />
-            </div>
-            <div className='flex justify-between pt-2'>
-              <Skeleton className='h-3 w-20' />
-              <Skeleton className='h-3 w-16' />
-            </div>
-          </div>
-        </div>
-      ))}
-    </div>
-  )
-}
-
+/* ===========================================================
+   News Panel - Main Component
+   =========================================================== */
 export function NewsPanel() {
   const [data, setData] = useState<NewsItem[]>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(false)
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [category, setCategory] = useState<NewsCategory>('all')
+  const [autoRefresh, setAutoRefresh] = useState(true)
+  const [nextRefresh, setNextRefresh] = useState(300)
   const [refreshing, setRefreshing] = useState(false)
-  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true)
-  const [nextRefreshIn, setNextRefreshIn] = useState(300) // 5分钟 = 300秒
 
-  const fetchData = useCallback(async (cat: NewsCategory, isRefresh = false) => {
-    try {
-      if (isRefresh) {
-        setRefreshing(true)
-      } else {
-        setLoading(true)
+  const loadData = useCallback(
+    async (cat: NewsCategory, isRefresh = false) => {
+      if (isRefresh) setRefreshing(true)
+      else setLoading(true)
+
+      try {
+        const res = await getNews(cat)
+        if (res.success) {
+          const sortedData = [...res.data]
+            .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime())
+            .slice(0, NEWS_DISPLAY_LIMIT)
+          setData(sortedData)
+        } else {
+          // 本地 RSS 服务未启动：展示空状态并提示
+          setData([])
+          setErrorMsg('请先启动本地 RSS 服务：`node local-api-server.js`')
+        }
+      } catch (err) {
+        setData([])
+        setErrorMsg((err as Error).message || '加载失败')
+      } finally {
+        setLoading(false)
+        setRefreshing(false)
+        setNextRefresh(300)
       }
-      setError(false)
-      const res = await getNews(cat)
-      if (res.success) {
-        setData(res.data)
-      } else {
-        setError(true)
-      }
-    } catch {
-      setError(true)
-    } finally {
-      setLoading(false)
-      setRefreshing(false)
-    }
-  }, [])
+    },
+    []
+  )
 
-  // 初始加载和分类切换
   useEffect(() => {
-    fetchData(category)
-    // 重置倒计时
-    setNextRefreshIn(300)
-  }, [fetchData, category])
+    loadData(category)
+  }, [loadData, category])
 
-  // 自动刷新定时器
+  // Auto-refresh countdown
   useEffect(() => {
-    if (!autoRefreshEnabled) return
-
+    if (!autoRefresh) return
     const timer = setInterval(() => {
-      setNextRefreshIn(prev => {
+      setNextRefresh((prev) => {
         if (prev <= 1) {
-          fetchData(category, false)
-          return 300 // 重置为5分钟
+          loadData(category, false)
+          return 300
         }
         return prev - 1
       })
     }, 1000)
-
     return () => clearInterval(timer)
-  }, [autoRefreshEnabled, category, fetchData])
-
-  const handleRefresh = () => {
-    fetchData(category, true)
-    setNextRefreshIn(300) // 手动刷新后重置倒计时
-  }
-
-  const formatCountdown = (seconds: number) => {
-    const mins = Math.floor(seconds / 60)
-    const secs = seconds % 60
-    return `${mins}:${secs.toString().padStart(2, '0')}`
-  }
+  }, [autoRefresh, category, loadData])
 
   return (
     <Card
-      title='科技新闻动态'
+      title="科技新闻动态"
+      subtitle="行业资讯 · 实时更新"
       action={
-        <div className='flex items-center gap-4'>
-          <NewsFilterTabs current={category} onChange={setCategory} />
-          <div className='flex items-center gap-3'>
-            {/* 自动刷新开关 */}
-            <div className='flex items-center gap-2'>
-              <span className='text-xs text-gray-500'>
-                {autoRefreshEnabled ? `下次更新: ${formatCountdown(nextRefreshIn)}` : '自动刷新已关闭'}
-              </span>
-              <button
-                onClick={() => setAutoRefreshEnabled(!autoRefreshEnabled)}
-                className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 ${
-                  autoRefreshEnabled ? 'bg-blue-600' : 'bg-gray-200'
-                }`}
-                title={autoRefreshEnabled ? '关闭自动刷新' : '开启自动刷新'}
-              >
-                <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                  autoRefreshEnabled ? 'translate-x-4' : 'translate-x-0'
-                }`} />
-              </button>
-            </div>
-            {/* 手动刷新按钮 */}
+        <div className="flex items-center gap-3">
+          <FilterTabs current={category} onChange={setCategory} />
+          <div className="flex items-center gap-2 text-xs text-slate-500">
             <button
-              onClick={handleRefresh}
-              disabled={refreshing || loading}
-              className='p-2 text-gray-400 hover:text-gray-600 transition-colors disabled:opacity-50'
-              title='刷新'
+              onClick={() => setAutoRefresh(!autoRefresh)}
+              className={[
+                'flex items-center gap-1 px-2.5 py-1.5 rounded-lg transition-all duration-200',
+                autoRefresh
+                  ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                  : 'bg-slate-100 text-slate-500 hover:bg-slate-200',
+              ].join(' ')}
             >
-              <svg 
-                className={`w-5 h-5 ${refreshing ? 'animate-spin' : ''}`} 
-                fill='none' 
-                stroke='currentColor' 
-                viewBox='0 0 24 24'
-              >
-                <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M4 4v5h.582m15.356 6.239A9 9 0 004 12c0-1.263.23-2.479.659-3.603M4.582 9H4m11.418 7H20m-1.582 0a9 9 0 01-15.356-2.761M9.582 9H4m15.356 2.239L20 9h.582M11.418 16H4m1.582 0A9 9 0 0020 12c0-1.263-.23-2.479-.659-3.603' />
-              </svg>
+              <span className={['w-1.5 h-1.5 rounded-full', autoRefresh ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'].join(' ')} />
+              {autoRefresh ? `下次 ${Math.floor(nextRefresh / 60)}:${String(nextRefresh % 60).padStart(2, '0')}` : '自动刷新已关闭'}
             </button>
           </div>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => loadData(category, true)}
+            disabled={refreshing || loading}
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} strokeWidth={2} />
+            刷新
+          </Button>
         </div>
       }
     >
       {loading ? (
-        <NewsSkeleton />
-      ) : error ? (
-        <ErrorState onRetry={handleRefresh} />
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {[...Array(9)].map((_, i) => (
+            <div key={i} className="rounded-2xl border border-slate-200 overflow-hidden bg-white">
+              <Skeleton className="h-36 w-full" />
+              <div className="p-4 space-y-2">
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-5/6" />
+                <Skeleton className="h-3 w-4/6" />
+                <div className="pt-2 flex justify-between">
+                  <Skeleton className="h-3 w-16" />
+                  <Skeleton className="h-3 w-20" />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : errorMsg ? (
+        <ErrorState
+          message="无法获取真实新闻"
+          description={errorMsg}
+          onRetry={() => loadData(category, true)}
+        />
       ) : data.length === 0 ? (
-        <EmptyState
-          message='暂无新闻'
-          description='换个分类试试吧'
+        <ErrorState
+          message="暂无资讯"
+          description="该分类下暂无内容，试试其他分类或稍后再看"
+          onRetry={() => loadData('all', true)}
         />
       ) : (
-        <NewsGrid news={data} />
+        <div>
+          {/* Tip banner */}
+          <div className="mb-5 flex items-center gap-3 rounded-2xl bg-gradient-to-r from-primary-50 via-white to-accent-50 border border-primary-100/50 p-4">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center text-white shadow-lg shadow-primary-500/30 flex-shrink-0">
+              <Sparkles className="w-4 h-4" strokeWidth={2} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm text-slate-700 leading-relaxed">
+                共 <span className="font-semibold text-slate-900">{data.length}</span> 条精选资讯
+                {category !== 'all' && ` · ${categoryConfig[category].label}分类`}
+              </p>
+            </div>
+            <div className="flex items-center gap-1 text-xs text-slate-500 flex-shrink-0">
+              <ExternalLink className="w-3.5 h-3.5" strokeWidth={2} />
+              <span>点击查看原文</span>
+            </div>
+          </div>
+
+          {/* News Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {data.map((item) => (
+              <NewsCard key={item.id} item={item} />
+            ))}
+          </div>
+        </div>
       )}
     </Card>
   )

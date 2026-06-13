@@ -5,8 +5,8 @@ import Parser from 'rss-parser';
 
 const PORT = 3001;
 
-// 环境变量：是否使用真实RSS抓取
-const USE_REAL_RSS = process.env.USE_REAL_RSS === 'true';
+// 环境变量：是否使用真实RSS抓取（默认 true，获取真实新闻网站数据）
+const USE_REAL_RSS = process.env.USE_REAL_RSS !== 'false';
 
 const RSS_FEEDS = {
   ai: [

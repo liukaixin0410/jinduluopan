@@ -1,1026 +1,781 @@
-import { useCallback, useEffect, useState } from 'react';
-import {
-  getAdsSummary,
-  getDataSourceConfigs,
-  activateDataSourceConfig,
-} from '../../services/dashboard';
-import type {
-  AdsSummaryData,
-  MetricItem,
-  DataTableRow,
-  AimeAnalysisData,
-  DataSourceConfig,
-  DataRefinement,
-  TrendType,
-} from '../../types/dashboard';
-import { Card, ErrorState, Skeleton } from './shared/Card';
-import { Modal } from './shared/Modal';
-import { Button } from './shared/Card';
-import { Badge } from './shared/Card';
+import { useCallback, useEffect, useState } from 'react'
+import { TrendingUp, TrendingDown, Minus, Sparkles, Lightbulb, Settings, RefreshCw, ExternalLink } from 'lucide-react'
+import { Card, Skeleton, ErrorState, Badge, Button } from './shared/Card'
+import { Modal } from './shared/Modal'
+import { getAdsSummary, getAdsConfig } from '../../services/dashboard'
 
-interface MetricCardProps {
-  metric: MetricItem;
+type TrendType = 'up' | 'down' | 'stable'
+
+interface MetricItem {
+  key: string
+  label: string
+  displayValue: string
+  changeDisplay: string
+  trend: TrendType
 }
 
-function MetricCard({ metric }: MetricCardProps) {
-  const trendColors = {
-    up: 'text-green-600',
+interface DataTableRow {
+  channel: string
+  cost: number
+  impression: number
+  click: number
+  ctr: number
+  conversion: number
+  roi: number
+  conversionCost: number
+}
+
+interface AimeSuggestion {
+  title: string
+  description: string
+}
+
+interface DataRefinementSection {
+  title: string
+  items: Array<{
+    label: string
+    value: string
+    percentage: number
+    trend: TrendType
+    changeDisplay: string
+  }>
+  tone: 'success' | 'warning'
+}
+
+interface InsightItem {
+  title: string
+  impact: 'high' | 'medium' | 'low'
+  description: string
+  recommendation?: string
+}
+
+interface AdsSummaryData {
+  date: string
+  metrics: MetricItem[]
+  summary: string
+  hasFengshenDashboard: boolean
+  fengshenUrl: string
+  syncTime: string
+  sourceName: string
+  updatedAt: string
+  hasDataTable: boolean
+  dataTableData: DataTableRow[]
+  hasDataRefinement: boolean
+  keyMetrics: MetricItem[]
+  topPerformers: DataRefinementSection['items']
+  weakPoints: DataRefinementSection['items']
+  insights: InsightItem[]
+  hasAimeAnalysis: boolean
+  aimeScore: number
+  aimeTrend: TrendType
+  suggestions: AimeSuggestion[]
+  optimizations: Array<{ name: string; expectedImprovement: string; priority: 'high' | 'medium' | 'low' }>
+}
+
+interface DataSourceConfig {
+  id: string
+  name: string
+  type: string
+  isActive: boolean
+  hasFengshenDashboard: boolean
+  hasDataTable: boolean
+  hasAimeAnalysis: boolean
+  channels: string[]
+  syncInterval?: number
+}
+
+
+
+/* ===========================================================
+   Trend icons & utilities
+   =========================================================== */
+function getTrendIcon(trend: TrendType) {
+  const icons = {
+    up: TrendingUp,
+    down: TrendingDown,
+    stable: Minus,
+  }
+  return icons[trend]
+}
+
+function getTrendColor(trend: TrendType) {
+  return {
+    up: 'text-emerald-600',
     down: 'text-red-600',
-    stable: 'text-gray-600',
-  };
-
-  const trendIcons = {
-    up: '↑',
-    down: '↓',
-    stable: '→',
-  };
-
-  return (
-    <div className="bg-gray-50 rounded-lg p-4">
-      <p className="text-sm text-gray-500">{metric.label}</p>
-      <div className="mt-2 flex items-baseline gap-2">
-        <p className="text-2xl font-bold text-gray-900">{metric.displayValue}</p>
-        <span className={`text-sm font-medium ${trendColors[metric.trend]} flex items-center gap-1`}>
-          {trendIcons[metric.trend]}
-          {metric.changeDisplay}
-        </span>
-      </div>
-    </div>
-  );
+    stable: 'text-slate-500',
+  }[trend]
 }
 
-interface SummaryTextProps {
-  summary: string;
+function formatDate(dateStr: string) {
+  const d = new Date(dateStr)
+  return d.toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
 }
 
-function SummaryText({ summary }: SummaryTextProps) {
+/* ===========================================================
+   Metric Card
+   =========================================================== */
+function MetricCard({ metric }: { metric: MetricItem }) {
+  const Icon = getTrendIcon(metric.trend)
   return (
-    <div className="bg-blue-50 rounded-lg p-4">
-      <div className="flex items-start gap-3">
-        <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 flex-shrink-0">
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
-            />
-          </svg>
+    <div className="group p-4 rounded-2xl bg-slate-50/60 border border-slate-100 hover:border-slate-200 hover:bg-white transition-all duration-300">
+      <p className="text-xs text-slate-500 font-medium">{metric.label}</p>
+      <div className="mt-2 flex items-baseline justify-between gap-2">
+        <p className="text-xl font-bold text-slate-900 tracking-tight">{metric.displayValue}</p>
+        <div className={`flex items-center gap-0.5 text-xs font-semibold ${getTrendColor(metric.trend)}`}>
+          <Icon className="w-3.5 h-3.5" strokeWidth={2.5} />
+          <span>{metric.changeDisplay}</span>
         </div>
-        <p className="text-sm text-gray-700">{summary}</p>
       </div>
     </div>
-  );
+  )
 }
 
-interface AttributionListProps {
-  attributions: string[];
-}
-
-function AttributionList({ attributions }: AttributionListProps) {
+/* ===========================================================
+   Summary Panel
+   =========================================================== */
+function SummaryPanel({ summary }: { summary: string }) {
   return (
-    <div>
-      <h4 className="text-sm font-medium text-gray-700 mb-3">归因分析</h4>
-      <ul className="space-y-2">
-        {attributions.map((item, index) => (
-          <li key={index} className="flex items-start gap-2 text-sm text-gray-600">
-            <span className="w-1.5 h-1.5 bg-gray-400 rounded-full mt-2 flex-shrink-0" />
-            <span>{item}</span>
-          </li>
-        ))}
-      </ul>
+    <div className="rounded-2xl bg-gradient-to-br from-primary-50 to-accent-50 border border-primary-100/60 p-5">
+      <div className="flex items-start gap-3">
+        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center text-white shadow-lg shadow-primary-500/30 flex-shrink-0">
+          <Sparkles className="w-4.5 h-4.5" strokeWidth={2} />
+        </div>
+        <p className="text-sm text-slate-700 leading-relaxed">{summary}</p>
+      </div>
     </div>
-  );
+  )
 }
 
-interface DataTableProps {
-  data: DataTableRow[];
-}
+/* ===========================================================
+   Data Table
+   =========================================================== */
+function DataTable({ data }: { data: DataTableRow[] }) {
+  const columns = [
+    { key: 'channel' as const, label: '渠道', align: 'left' as const },
+    { key: 'cost' as const, label: '消耗', format: (v: number) => `¥${(v / 1000).toFixed(1)}K`, align: 'right' as const },
+    { key: 'impression' as const, label: '展现', format: (v: number) => `${(v / 10000).toFixed(1)}万`, align: 'right' as const },
+    { key: 'click' as const, label: '点击', format: (v: number) => `${(v / 1000).toFixed(1)}K`, align: 'right' as const },
+    { key: 'ctr' as const, label: 'CTR', format: (v: number) => `${v.toFixed(1)}%`, align: 'right' as const },
+    { key: 'conversion' as const, label: '转化', format: (v: number) => v.toString(), align: 'right' as const },
+    { key: 'roi' as const, label: 'ROI', format: (v: number) => v.toFixed(2), highlight: true, align: 'right' as const },
+    { key: 'conversionCost' as const, label: '转化成本', format: (v: number) => `¥${v.toFixed(0)}`, align: 'right' as const },
+  ]
 
-function DataTable({ data }: DataTableProps) {
   return (
-    <div className="border border-gray-200 rounded-lg overflow-hidden">
+    <div className="rounded-2xl border border-slate-200 overflow-hidden bg-white">
       <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead className="bg-gray-50 border-b border-gray-200">
-            <tr>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                渠道
-              </th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                消耗
-              </th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                展现
-              </th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                点击
-              </th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                CTR
-              </th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                转化
-              </th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                ROI
-              </th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                转化成本
-              </th>
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-slate-50 border-b border-slate-200">
+              {columns.map((col) => (
+                <th
+                  key={col.key}
+                  className={`px-4 py-3 font-semibold text-slate-600 text-xs uppercase tracking-wider ${
+                    col.align === 'right' ? 'text-right' : 'text-left'
+                  }`}
+                >
+                  {col.label}
+                </th>
+              ))}
             </tr>
           </thead>
-          <tbody className="bg-white divide-y divide-gray-100">
-            {data.map((row, index) => (
-              <tr key={index} className="hover:bg-gray-50 transition-colors">
-                <td className="px-4 py-3 text-sm font-medium text-gray-900">{row.channel}</td>
-                <td className="px-4 py-3 text-sm text-gray-600 text-right">
-                  {(row.cost / 1000).toFixed(2)}千
-                </td>
-                <td className="px-4 py-3 text-sm text-gray-600 text-right">
-                  {(row.impression / 10000).toFixed(1)}万
-                </td>
-                <td className="px-4 py-3 text-sm text-gray-600 text-right">
-                  {(row.click / 1000).toFixed(1)}千
-                </td>
-                <td className="px-4 py-3 text-sm text-gray-600 text-right">
-                  {row.ctr.toFixed(2)}%
-                </td>
-                <td className="px-4 py-3 text-sm text-gray-600 text-right">{row.conversion}</td>
-                <td className="px-4 py-3 text-sm text-gray-600 text-right font-medium">
-                  {row.roi.toFixed(2)}
-                </td>
-                <td className="px-4 py-3 text-sm text-gray-600 text-right">
-                  {row.conversionCost.toFixed(2)}
-                </td>
+          <tbody className="divide-y divide-slate-100">
+            {data.map((row, idx) => (
+              <tr key={idx} className="hover:bg-slate-50/60 transition-colors">
+                {columns.map((col) => {
+                  const value = row[col.key]
+                  const formatted = col.format ? col.format(value as number) : value
+                  const isHighlight = (col as any).highlight
+                  return (
+                    <td
+                      key={col.key}
+                      className={`px-4 py-3 whitespace-nowrap ${
+                        col.align === 'right' ? 'text-right' : 'text-left'
+                      } ${
+                        col.key === 'channel' ? 'font-semibold text-slate-900' : 'text-slate-600'
+                      } ${isHighlight ? 'text-primary-700 font-semibold' : ''}`}
+                    >
+                      {formatted}
+                    </td>
+                  )
+                })}
               </tr>
             ))}
           </tbody>
         </table>
       </div>
     </div>
-  );
+  )
 }
 
-interface AimeAnalysisProps {
-  analysis: AimeAnalysisData;
-}
-
-function AimeAnalysis({ analysis }: AimeAnalysisProps) {
-  const priorityColors = {
-    high: 'bg-red-50 text-red-700',
-    medium: 'bg-yellow-50 text-yellow-700',
-    low: 'bg-gray-50 text-gray-600',
-  };
-
-  const priorityLabels = {
-    high: '高优先级',
-    medium: '中优先级',
-    low: '低优先级',
-  };
-
-  const trendPredictionConfig = {
-    up: { color: 'text-green-600', icon: '↑', label: '预计上升' },
-    stable: { color: 'text-gray-600', icon: '→', label: '预计持平' },
-    down: { color: 'text-red-600', icon: '↓', label: '预计下降' },
-  };
+/* ===========================================================
+   Refinement Section - Top Performers & Weak Points
+   =========================================================== */
+function RefinementBlock({
+  title,
+  items,
+  tone,
+}: {
+  title: string
+  items: DataRefinementSection['items']
+  tone: 'success' | 'warning'
+}) {
+  const bgGradient = tone === 'success'
+    ? 'from-emerald-50 to-teal-50 border-emerald-100/60'
+    : 'from-amber-50 to-orange-50 border-amber-100/60'
+  const barFill = tone === 'success' ? 'bg-gradient-to-r from-emerald-400 to-emerald-500' : 'bg-gradient-to-r from-amber-400 to-orange-500'
+  const barTrack = tone === 'success' ? 'bg-emerald-100/60' : 'bg-amber-100/60'
+  const Icon = tone === 'success' ? TrendingUp : TrendingDown
 
   return (
-    <div className="bg-gradient-to-br from-purple-50 to-indigo-50 rounded-lg p-6">
-      <div className="flex items-start justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-lg flex items-center justify-center text-white shadow-lg">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
-              />
-            </svg>
-          </div>
-          <div>
-            <h4 className="font-semibold text-gray-900">AIME 智能解读 · 基于风神数据</h4>
-            <p className="text-xs text-gray-500">实时分析风神数据看板的归因结果</p>
-            <div className="flex items-center gap-2 mt-1">
-              <div className="flex items-baseline gap-1">
-                <span className="text-2xl font-bold text-purple-600">{analysis.overallScore}</span>
-                <span className="text-sm text-gray-500">/ 100</span>
+    <div className={`rounded-2xl bg-gradient-to-br ${bgGradient} border p-5`}>
+      <h4 className="text-sm font-semibold text-slate-900 mb-4 flex items-center gap-2">
+        <Icon className={`w-4 h-4 ${tone === 'success' ? 'text-emerald-600' : 'text-amber-600'}`} strokeWidth={2.5} />
+        {title}
+      </h4>
+      <div className="space-y-3">
+        {items.map((item, idx) => (
+          <div key={idx} className="bg-white/80 backdrop-blur-sm rounded-xl p-4 border border-white shadow-sm hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-between mb-2 gap-4">
+              <div className="min-w-0 flex-1">
+                <h5 className="text-sm font-semibold text-slate-900 truncate">{item.label}</h5>
+                <p className="text-xs text-slate-500 mt-0.5">贡献占比 · {item.percentage}%</p>
               </div>
-              <div className={`flex items-center gap-1 text-sm font-medium ${trendPredictionConfig[analysis.trendPrediction].color}`}>
-                <span>{trendPredictionConfig[analysis.trendPrediction].icon}</span>
-                <span>{trendPredictionConfig[analysis.trendPrediction].label}</span>
+              <div className={`flex items-center gap-1 text-xs font-semibold whitespace-nowrap ${getTrendColor(item.trend)}`}>
+                <Icon className="w-3 h-3" strokeWidth={2.5} />
+                {item.changeDisplay}
               </div>
             </div>
-          </div>
-        </div>
-        <div className="text-right">
-          <p className="text-xs text-gray-500">基于风神数据 · AI 实时生成</p>
-        </div>
-      </div>
-
-      <div className="mb-5">
-        <h5 className="text-sm font-medium text-gray-700 mb-3">智能建议</h5>
-        <ul className="space-y-2">
-          {analysis.suggestions.map((suggestion, index) => (
-            <li key={index} className="flex items-start gap-2 text-sm text-gray-600">
-              <span className="w-5 h-5 bg-green-100 text-green-600 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                  <path
-                    fillRule="evenodd"
-                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-              </span>
-              <span>{suggestion}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
-
-      <div>
-        <h5 className="text-sm font-medium text-gray-700 mb-3">优化方案</h5>
-        <div className="space-y-3">
-          {analysis.optimizations.map((opt, index) => (
-            <div key={index} className="bg-white rounded-lg p-4 border border-purple-100">
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <h6 className="text-sm font-medium text-gray-900">{opt.name}</h6>
-                  <p className="text-xs text-gray-500 mt-1">{opt.expectedImprovement}</p>
-                </div>
-                <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${priorityColors[opt.priority]}`}>
-                  {priorityLabels[opt.priority]}
-                </span>
+            <div className="flex items-center gap-2">
+              <div className={`flex-1 ${barTrack} rounded-full h-1.5 overflow-hidden`}>
+                <div className={`${barFill} h-full rounded-full transition-all duration-700`} style={{ width: `${item.percentage}%` }} />
               </div>
+              <span className="text-sm font-bold text-slate-700 whitespace-nowrap">{item.value}</span>
             </div>
-          ))}
-        </div>
+          </div>
+        ))}
       </div>
     </div>
-  );
+  )
 }
 
-interface DataRefinementProps {
-  dataRefinement: DataRefinement;
-}
-
-function DataRefinement({ dataRefinement }: DataRefinementProps) {
-  const trendColors: Record<TrendType, string> = {
-    up: 'text-green-600 bg-green-100',
-    down: 'text-red-600 bg-red-100',
-    stable: 'text-gray-600 bg-gray-100',
-  };
-
-  const impactColors: Record<'high' | 'medium' | 'low', string> = {
-    high: 'border-l-red-300 bg-red-50',
-    medium: 'border-l-yellow-300 bg-yellow-50',
-    low: 'border-l-gray-300 bg-gray-50',
-  };
-
-  const impactLabels: Record<'high' | 'medium' | 'low', string> = {
-    high: '高影响',
-    medium: '中影响',
-    low: '低影响',
-  };
+/* ===========================================================
+   Insights Section
+   =========================================================== */
+function InsightsSection({ insights }: { insights: InsightItem[] }) {
+  const impactConfig = {
+    high: { label: '高影响', badge: 'bg-red-100 text-red-700 border-red-200', leftBar: 'border-l-red-300 bg-red-50/40' },
+    medium: { label: '中影响', badge: 'bg-amber-100 text-amber-700 border-amber-200', leftBar: 'border-l-amber-300 bg-amber-50/40' },
+    low: { label: '低影响', badge: 'bg-slate-100 text-slate-600 border-slate-200', leftBar: 'border-l-slate-300 bg-slate-50/40' },
+  }
 
   return (
-    <div className="space-y-6">
-      {/* 关键指标概览 */}
-      <div className="bg-gradient-to-r from-blue-50 to-cyan-50 rounded-lg p-5 border border-blue-100">
-        <h4 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-          <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
-            />
-          </svg>
-          数据提炼 · 关键指标
-        </h4>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {dataRefinement.keyMetrics.map((metric, index: number) => (
-            <div key={index} className="bg-white rounded-lg p-4 border border-blue-200 shadow-sm">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-gray-700">{metric.label}</span>
-                <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${trendColors[metric.trend as TrendType]}`}>
-                  {metric.trend === 'up' ? '↑' : metric.trend === 'down' ? '↓' : '→'}
+    <div className="rounded-2xl bg-white border border-slate-200 p-5">
+      <h4 className="text-sm font-semibold text-slate-900 mb-4 flex items-center gap-2">
+        <Lightbulb className="w-4 h-4 text-amber-500" strokeWidth={2} fill="currentColor" />
+        归因洞察 · 深度分析
+      </h4>
+      <div className="space-y-3">
+        {insights.map((insight, idx) => {
+          const config = impactConfig[insight.impact]
+          return (
+            <div
+              key={idx}
+              className={`rounded-xl border border-slate-200 ${config.leftBar} border-l-4 p-4`}
+            >
+              <div className="flex items-start justify-between gap-4 mb-2">
+                <h5 className="text-sm font-semibold text-slate-900 leading-tight">{insight.title}</h5>
+                <span className={`px-2 py-0.5 rounded-full text-xs font-semibold border ${config.badge} whitespace-nowrap`}>
+                  {config.label}
                 </span>
               </div>
-              <div className="mt-2">
-                <span className="text-2xl font-bold text-gray-900">{metric.value}</span>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* 渠道表现分析 */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* 优质渠道 */}
-        <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg p-5 border border-green-100">
-          <h4 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-            <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M5 13l4 4L19 7"
-              />
-            </svg>
-            优质渠道 · 归因分析
-          </h4>
-          <div className="space-y-3">
-            {dataRefinement.topPerformers.map((item, index: number) => (
-              <div key={index} className="bg-white rounded-lg p-4 border border-green-200">
-                <div className="flex items-start justify-between mb-2">
-                  <div className="flex-1">
-                    <h5 className="text-sm font-semibold text-gray-900">{item.label}</h5>
-                    <p className="text-xs text-gray-500 mt-0.5">贡献占比：{item.percentage}%</p>
-                  </div>
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${trendColors[item.trend as TrendType]}`}>
-                    {item.changeDisplay}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 bg-green-100 rounded-full h-2">
-                    <div
-                      className="bg-green-500 h-2 rounded-full transition-all duration-300"
-                      style={{ width: `${item.percentage}%` }}
-                    />
-                  </div>
-                  <span className="text-sm font-bold text-green-700">{item.displayValue}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* 待优化渠道 */}
-        <div className="bg-gradient-to-r from-amber-50 to-orange-50 rounded-lg p-5 border border-amber-100">
-          <h4 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-            <svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-              />
-            </svg>
-            待优化渠道 · 归因下钻
-          </h4>
-          <div className="space-y-3">
-            {dataRefinement.weakPoints.map((item, index: number) => (
-              <div key={index} className="bg-white rounded-lg p-4 border border-amber-200">
-                <div className="flex items-start justify-between mb-2">
-                  <div className="flex-1">
-                    <h5 className="text-sm font-semibold text-gray-900">{item.label}</h5>
-                    <p className="text-xs text-gray-500 mt-0.5">当前占比：{item.percentage}%</p>
-                  </div>
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${trendColors[item.trend as TrendType]}`}>
-                    {item.changeDisplay}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 bg-amber-100 rounded-full h-2">
-                    <div
-                      className="bg-amber-500 h-2 rounded-full transition-all duration-300"
-                      style={{ width: `${item.percentage}%` }}
-                    />
-                  </div>
-                  <span className="text-sm font-bold text-amber-700">{item.displayValue}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* 归因洞察 */}
-      <div className="bg-white rounded-lg p-5 border border-gray-200 shadow-sm">
-        <h4 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-          <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
-            />
-          </svg>
-          归因洞察 · 深度分析
-        </h4>
-        <div className="space-y-4">
-          {dataRefinement.insights.map((insight, index: number) => (
-            <div key={index} className={`rounded-lg p-4 border-l-4 ${impactColors[insight.impact as 'high' | 'medium' | 'low']}`}>
-              <div className="flex items-start justify-between mb-2">
-                <h5 className="text-sm font-semibold text-gray-900">{insight.title}</h5>
-                <div className="flex items-center gap-2">
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
-                    insight.impact === 'high' ? 'bg-red-200 text-red-700' :
-                    insight.impact === 'medium' ? 'bg-yellow-200 text-yellow-700' :
-                    'bg-gray-200 text-gray-700'
-                  }`}>
-                    {impactLabels[insight.impact as 'high' | 'medium' | 'low']}
-                  </span>
-                  {insight.actionable && (
-                    <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">
-                      可执行
-                    </span>
-                  )}
-                </div>
-              </div>
-              <p className="text-sm text-gray-700 mb-3">{insight.description}</p>
+              <p className="text-sm text-slate-600 leading-relaxed">{insight.description}</p>
               {insight.recommendation && (
-                <div className="flex items-start gap-2 bg-white rounded-lg p-3 border border-gray-200">
-                  <svg className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M13 10V3L4 14h7v7l9-11h-7z"
-                    />
-                  </svg>
-                  <p className="text-sm text-gray-800 font-medium">{insight.recommendation}</p>
+                <div className="mt-3 flex items-start gap-2 rounded-xl bg-slate-50/80 border border-slate-100 p-3">
+                  <div className="w-6 h-6 rounded-lg bg-primary-100 text-primary-600 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <span className="text-xs font-bold">→</span>
+                  </div>
+                  <p className="text-sm text-slate-700 font-medium leading-relaxed">{insight.recommendation}</p>
                 </div>
               )}
-              <div className="flex flex-wrap gap-2 mt-3">
-                {insight.relatedMetrics.map((metric: string, i: number) => (
-                  <span key={i} className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-full">
-                    {metric}
-                  </span>
-                ))}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+/* ===========================================================
+   AIME Analysis
+   =========================================================== */
+function AimeAnalysis({ score, trend, suggestions, optimizations }: {
+  score: number
+  trend: TrendType
+  suggestions: AimeSuggestion[]
+  optimizations: AdsSummaryData['optimizations']
+}) {
+  const TrendIcon = getTrendIcon(trend)
+  const priorityConfig = {
+    high: { label: '高优先', color: 'bg-red-100 text-red-700 border-red-200' },
+    medium: { label: '中优先', color: 'bg-amber-100 text-amber-700 border-amber-200' },
+    low: { label: '低优先', color: 'bg-slate-100 text-slate-600 border-slate-200' },
+  }
+
+  return (
+    <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-accent-50 via-white to-primary-50 border border-accent-100/60 p-6">
+      {/* Decorative */}
+      <div className="absolute -top-10 -right-10 w-40 h-40 bg-accent-200/40 rounded-full blur-3xl" />
+
+      <div className="relative">
+        {/* Header */}
+        <div className="flex items-start justify-between mb-5 gap-4 flex-wrap">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-accent-500 to-primary-500 flex items-center justify-center text-white shadow-lg shadow-accent-500/30">
+              <Sparkles className="w-5 h-5" strokeWidth={2} fill="currentColor" />
+            </div>
+            <div>
+              <h4 className="font-semibold text-slate-900 text-base">AIME 智能解读</h4>
+              <p className="text-xs text-slate-500 mt-0.5">基于风神数据 · 实时生成</p>
+            </div>
+          </div>
+
+          {/* Score */}
+          <div className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-white border border-accent-100 shadow-sm">
+            <div className="text-right">
+              <div className="flex items-baseline gap-1">
+                <span className="text-3xl font-bold text-accent-600 tracking-tight">{score}</span>
+                <span className="text-sm text-slate-400 font-medium">/ 100</span>
+              </div>
+              <div className={`flex items-center gap-1 justify-end text-xs font-semibold ${getTrendColor(trend)}`}>
+                <TrendIcon className="w-3 h-3" strokeWidth={2.5} />
+                <span>预期上升</span>
               </div>
             </div>
-          ))}
+          </div>
+        </div>
+
+        {/* Suggestions */}
+        <div className="mb-5">
+          <h5 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">智能建议</h5>
+          <ul className="space-y-2">
+            {suggestions.map((s, idx) => (
+              <li key={idx} className="flex items-start gap-2 text-sm text-slate-700">
+                <span className="flex-shrink-0 w-5 h-5 rounded-md bg-emerald-100 text-emerald-600 flex items-center justify-center text-xs font-bold mt-0.5">
+                  {idx + 1}
+                </span>
+                <div>
+                  <span className="font-medium text-slate-900">{s.title}</span>
+                  <span className="text-slate-500"> — {s.description}</span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        {/* Optimizations */}
+        <div>
+          <h5 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">优化方案</h5>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            {optimizations.map((opt, idx) => (
+              <div key={idx} className="flex items-start justify-between gap-3 rounded-xl bg-white border border-slate-100 p-3 hover:border-slate-200 transition-colors">
+                <div className="min-w-0">
+                  <h6 className="text-sm font-semibold text-slate-900 leading-tight">{opt.name}</h6>
+                  <p className="text-xs text-slate-500 mt-0.5">{opt.expectedImprovement}</p>
+                </div>
+                <span className={`px-2 py-0.5 rounded-full text-xs font-semibold border whitespace-nowrap ${priorityConfig[opt.priority].color}`}>
+                  {priorityConfig[opt.priority].label}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </div>
-  );
+  )
 }
 
-export function AdsSummaryPanel() {
-  const [data, setData] = useState<AdsSummaryData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
-  const [configModalOpen, setConfigModalOpen] = useState(false);
-  const [configs, setConfigs] = useState<DataSourceConfig[]>([]);
-  const [currentConfig, setCurrentConfig] = useState<DataSourceConfig | null>(null);
-  const [configLoading, setConfigLoading] = useState(false);
-  const [selectedConfigId, setSelectedConfigId] = useState<string>('');
-  
-  // 显示模式：custom = 自定义卡片，embed = 直接嵌入风神仪表盘
-  const [displayMode, setDisplayMode] = useState<'custom' | 'embed'>('embed');
-  
-  // 当前选中的仪表盘类型
-  const [dashboardType, setDashboardType] = useState<'daily' | 'weekly' | 'realtime'>('daily');
-  
-  // 三个风神仪表盘地址
-  const DASHBOARD_URLS = {
-    daily: 'https://data.bytedance.net/aeolus/pages/dashboard/1510451?appId=1128&sheetId=2112164&snapshotId=1184035',
-    weekly: 'https://data.bytedance.net/aeolus/pages/dashboard/1627430?appId=1128&sheetId=2320850&snapshotId=1184827',
-    realtime: 'https://data.bytedance.net/aeolus/pages/dashboard/1557333?appId=1002633&isDefault=1&sheetId=2196108&snapshotId=1184828'
-  };
+/* ===========================================================
+   Config Modal
+   =========================================================== */
+function ConfigModal({
+  isOpen,
+  onClose,
+  onSave,
+  configs,
+  currentConfig,
+  selectedConfigId,
+  setSelectedConfigId,
+}: {
+  isOpen: boolean
+  onClose: () => void
+  onSave: () => void
+  configs: DataSourceConfig[]
+  currentConfig: DataSourceConfig | null
+  selectedConfigId: string
+  setSelectedConfigId: (id: string) => void
+}) {
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="数据源配置"
+      description="选择一个数据源，保存后自动刷新数据"
+      size="lg"
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>取消</Button>
+          <Button onClick={onSave} disabled={!selectedConfigId}>保存配置</Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        {currentConfig && (
+          <div className="rounded-2xl bg-primary-50 border border-primary-100 p-4">
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center text-white flex-shrink-0 shadow-lg shadow-primary-500/30">
+                <span className="text-sm font-bold">✓</span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <h4 className="text-sm font-semibold text-slate-900">当前数据源</h4>
+                <p className="text-sm text-slate-600 mt-0.5">{currentConfig.name}</p>
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {currentConfig.hasFengshenDashboard && <Badge color="blue">风神看板</Badge>}
+                  {currentConfig.hasDataTable && <Badge color="green">数据明细</Badge>}
+                  {currentConfig.hasAimeAnalysis && <Badge color="purple">AI 分析</Badge>}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
-  const fetchData = useCallback(async (isRefresh = false) => {
+        <div>
+          <h4 className="text-sm font-semibold text-slate-900 mb-2">选择数据源</h4>
+          <div className="space-y-2">
+            {configs.map((config) => {
+              const isSelected = selectedConfigId === config.id
+              return (
+                <div
+                  key={config.id}
+                  onClick={() => setSelectedConfigId(config.id)}
+                  className={`border rounded-2xl p-4 cursor-pointer transition-all duration-200 ${
+                    isSelected
+                      ? 'border-primary-500 bg-primary-50/40 ring-2 ring-primary-500/20 shadow-md'
+                      : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50 hover:shadow-sm'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex items-start gap-3 flex-1 min-w-0">
+                      <input
+                        type="radio"
+                        name="dataSource"
+                        checked={isSelected}
+                        onChange={() => setSelectedConfigId(config.id)}
+                        className="mt-1 text-primary-600 focus:ring-primary-500 flex-shrink-0"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h5 className="text-sm font-semibold text-slate-900">{config.name}</h5>
+                          {config.isActive && <Badge color="green">当前使用</Badge>}
+                        </div>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          类型: {config.type === 'fengshen' ? '风神看板' : config.type === 'api' ? '自定义 API' : '演示数据'}
+                        </p>
+                        <div className="flex flex-wrap gap-1.5 mt-2">
+                          {config.channels.slice(0, 4).map((ch, i) => (
+                            <span key={i} className="text-xs px-2 py-0.5 rounded-md bg-slate-100 text-slate-600">
+                              {ch}
+                            </span>
+                          ))}
+                          {config.channels.length > 4 && (
+                            <span className="text-xs px-2 py-0.5 rounded-md bg-slate-100 text-slate-500">
+                              +{config.channels.length - 4}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-xs text-slate-400 flex-shrink-0">
+                      {config.hasFengshenDashboard && <span className="w-1.5 h-1.5 rounded-full bg-primary-400" />}
+                      {config.hasDataTable && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />}
+                      {config.hasAimeAnalysis && <span className="w-1.5 h-1.5 rounded-full bg-accent-400" />}
+                    </div>
+                  </div>
+                  {config.syncInterval && (
+                    <p className="text-xs text-slate-400 mt-2 ml-7">
+                      同步间隔: {Math.floor(config.syncInterval / 60)} 分钟
+                    </p>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        <div className="rounded-2xl bg-amber-50/60 border border-amber-200 p-4">
+          <p className="text-sm text-amber-800 font-medium mb-1">💡 配置说明</p>
+          <ul className="text-xs text-amber-700 space-y-1 mt-1">
+            <li>• 选择数据源后点击"保存配置"生效</li>
+            <li>• 保存后自动刷新页面数据</li>
+          </ul>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+/* ===========================================================
+   Main Component
+   =========================================================== */
+export function AdsSummaryPanel() {
+  const [data, setData] = useState<AdsSummaryData | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+  const [configs, setConfigs] = useState<DataSourceConfig[]>([])
+  const [currentConfig, setCurrentConfig] = useState<DataSourceConfig | null>(null)
+  const [configModalOpen, setConfigModalOpen] = useState(false)
+  const [selectedConfigId, setSelectedConfigId] = useState<string>('')
+
+  const loadData = useCallback(async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true)
+    else setLoading(true)
+
     try {
-      if (isRefresh) {
-        setRefreshing(true);
+      const [summaryRes, configRes] = await Promise.all([
+        getAdsSummary(),
+        getAdsConfig(),
+      ])
+
+      if (summaryRes && summaryRes.success && summaryRes.data) {
+        setData(summaryRes.data as unknown as AdsSummaryData)
       } else {
-        setLoading(true);
+        setData(null)
       }
-      setError(false);
-      const res = await getAdsSummary();
-      if (res.success) {
-        setData(res.data);
-      } else {
-        setError(true);
+
+      if (configRes && configRes.success && configRes.data) {
+        const cfgData = configRes.data as any
+        const list: DataSourceConfig[] = Array.isArray(cfgData.availableConfigs) && cfgData.availableConfigs.length > 0
+          ? cfgData.availableConfigs
+          : (cfgData.currentConfig ? [cfgData.currentConfig] : [])
+        setConfigs(list)
+        const activeCfg = list.find((c) => c.isActive) || list[0] || null
+        setCurrentConfig(activeCfg)
+        if (activeCfg) setSelectedConfigId(activeCfg.id)
       }
-    } catch {
-      setError(true);
+    } catch (err) {
+      setData(null)
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      setLoading(false)
+      setRefreshing(false)
     }
-  }, []);
+  }, [])
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    loadData()
+  }, [loadData])
 
-  const handleRefresh = () => {
-    fetchData(true);
-  };
-
-  const openConfigModal = async () => {
-    setConfigModalOpen(true);
-    await loadConfigs();
-  };
-
-  const loadConfigs = async () => {
-    setConfigLoading(true);
-    try {
-      const res = await getDataSourceConfigs();
-      if (res.success) {
-        setConfigs(res.data);
-        const active = res.data.find((c) => c.isActive);
-        if (active) {
-          setCurrentConfig(active);
-          setSelectedConfigId(active.id);
-        }
-      }
-    } catch (err) {
-      console.error('Failed to load configs:', err);
-    } finally {
-      setConfigLoading(false);
+  const handleSaveConfig = () => {
+    const cfg = configs.find((c) => c.id === selectedConfigId)
+    if (cfg) {
+      setCurrentConfig(cfg)
+      loadData(true)
     }
-  };
-
-  const handleSaveConfig = async () => {
-    if (!selectedConfigId) return;
-    try {
-      const res = await activateDataSourceConfig(selectedConfigId);
-      if (res.success) {
-        setCurrentConfig(res.data);
-        await fetchData(true);
-        setConfigModalOpen(false);
-      }
-    } catch (err) {
-      console.error('Failed to save config:', err);
-    }
-  };
-
-  const formatDate = (dateStr: string) => {
-    const d = new Date(dateStr);
-    return d.toLocaleString('zh-CN', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
+    setConfigModalOpen(false)
+  }
 
   return (
     <>
       <Card
         title="投流数据播报"
-        subtitle={data && data.date ? '数据日期：' + data.date : ''}
+        subtitle={data ? `数据日期 · ${data.date}` : ''}
         action={
-          <div className="flex items-center gap-2 flex-wrap">
-            {/* 仪表盘类型切换 */}
-            <div className="flex items-center bg-gray-100 rounded-lg p-0.5">
-              <button
-                onClick={() => setDashboardType('daily')}
-                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
-                  dashboardType === 'daily'
-                    ? 'bg-white text-blue-600 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                日报
-              </button>
-              <button
-                onClick={() => setDashboardType('weekly')}
-                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
-                  dashboardType === 'weekly'
-                    ? 'bg-white text-blue-600 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                周报
-              </button>
-              <button
-                onClick={() => setDashboardType('realtime')}
-                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
-                  dashboardType === 'realtime'
-                    ? 'bg-white text-blue-600 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                实时
-              </button>
-            </div>
-            
-            {/* 显示模式切换 */}
-            <div className="flex items-center bg-gray-100 rounded-lg p-0.5">
-              <button
-                onClick={() => setDisplayMode('custom')}
-                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
-                  displayMode === 'custom'
-                    ? 'bg-white text-blue-600 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                自定义卡片
-              </button>
-              <button
-                onClick={() => setDisplayMode('embed')}
-                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
-                  displayMode === 'embed'
-                    ? 'bg-white text-blue-600 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                风神仪表盘
-              </button>
-            </div>
+          <div className="flex items-center gap-2">
             <Button
-              variant="ghost"
+              variant="secondary"
               size="sm"
-              onClick={openConfigModal}
-              title="数据源配置"
+              onClick={() => setConfigModalOpen(true)}
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-                />
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                />
-              </svg>
+              <Settings className="w-3.5 h-3.5" strokeWidth={2} />
+              配置
             </Button>
             <Button
-              variant="ghost"
+              variant="secondary"
               size="sm"
-              onClick={handleRefresh}
+              onClick={() => loadData(true)}
               disabled={refreshing}
-              title="刷新数据"
             >
-              <svg
-                className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M4 4v5h.582m15.356 6.239A9 9 0 004 12c0-1.263.23-2.479.659-3.603M4.582 9H4m11.418 7H20m-1.582 0a9 9 0 01-15.356-2.761M9.582 9H4m15.356 2.239L20 9h.582M11.418 16H4m1.582 0A9 9 0 0020 12c0-1.263-.23-2.479-.659-3.603"
-                />
-              </svg>
+              <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} strokeWidth={2} />
+              刷新
             </Button>
           </div>
         }
       >
-        {displayMode === 'embed' ? (
-          // 嵌入模式：风神仪表盘
-          <div className="w-full">
-            {/* 风神仪表盘 */}
-            <div>
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center text-white shadow-sm">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z"
-                    />
-                  </svg>
-                </div>
-                <div>
-                  <h3 className="font-semibold text-gray-900">风神仪表盘</h3>
-                  <p className="text-sm text-gray-500">实时数据看板</p>
-                </div>
-              </div>
-              <div className="w-full h-[1200px] rounded-lg overflow-hidden border border-gray-200">
-                <iframe
-                  src={DASHBOARD_URLS[dashboardType]}
-                  title={`风神${dashboardType === 'daily' ? '日报' : dashboardType === 'weekly' ? '周报' : '实时'}仪表盘`}
-                  className="w-full h-full border-0"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  referrerPolicy="no-referrer"
-                  sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
-                />
-              </div>
-              <div className="mt-3 text-center text-sm text-gray-500">
-                <p>如果仪表盘无法正常显示，请点击下方按钮在新窗口打开</p>
-                <button
-                  onClick={() => window.open(DASHBOARD_URLS[dashboardType], '_blank')}
-                  className="mt-2 inline-flex items-center gap-2 px-4 py-2 bg-blue-500 text-white text-sm font-medium rounded-lg hover:bg-blue-600 transition-colors"
-                >
-                  在新窗口打开{dashboardType === 'daily' ? '日报' : dashboardType === 'weekly' ? '周报' : '实时'}仪表盘
-                </button>
-              </div>
+        {loading ? (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+              {[...Array(6)].map((_, i) => (
+                <Skeleton key={i} className="h-20" />
+              ))}
             </div>
+            <Skeleton className="h-24" />
+            <Skeleton className="h-64" />
           </div>
+        ) : !data ? (
+          <ErrorState onRetry={() => loadData(true)} />
         ) : (
-          // 自定义卡片模式
-          loading ? (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-                {[...Array(6)].map((_, i) => (
-                  <Skeleton key={i} className="h-20" />
-                ))}
+          <div className="space-y-5">
+            {/* Connection banner */}
+            <div className="flex items-center justify-between gap-4 rounded-2xl bg-gradient-to-r from-primary-50 to-accent-50 border border-primary-100/50 p-4">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center text-white shadow-lg shadow-primary-500/30 flex-shrink-0">
+                  <ExternalLink className="w-4 h-4" strokeWidth={2} />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h4 className="text-sm font-semibold text-slate-900">{data.sourceName}</h4>
+                    <Badge color="green">已同步</Badge>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-0.5 truncate">数据同步 · {data.syncTime}</p>
+                </div>
               </div>
-              <Skeleton className="h-24" />
-              <Skeleton className="h-32" />
-              <Skeleton className="h-48" />
-              <Skeleton className="h-64" />
             </div>
-          ) : error ? (
-            <ErrorState onRetry={handleRefresh} />
-          ) : data ? (
-            <div className="space-y-6">
-              {data.hasFengshenDashboard && (
-                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 rounded-lg p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center text-white shadow-sm">
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z"
-                        />
-                      </svg>
+
+            {/* Fengshen Dashboard Embed */}
+            {data.fengshenUrl && (
+              <div className="rounded-2xl overflow-hidden border border-slate-200 bg-white">
+                <div className="flex items-center justify-between px-5 py-3 bg-slate-50 border-b border-slate-200">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center flex-shrink-0">
+                      <TrendingUp className="w-3.5 h-3.5 text-white" strokeWidth={2} />
                     </div>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <h4 className="font-semibold text-gray-900">风神仪表盘</h4>
-                        <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700">
-                          <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-                          已同步
-                        </span>
-                      </div>
-                      <p className="text-sm text-gray-600 mt-0.5">
-                        数据与风神仪表盘同步 · {data.syncTime}
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => window.open(DASHBOARD_URLS[dashboardType], '_blank')}
-                      className="px-4 py-2 bg-blue-500 text-white text-sm font-medium rounded-lg hover:bg-blue-600 transition-colors"
-                    >
-                      查看详情
-                    </button>
+                    <h3 className="text-sm font-semibold text-slate-900 truncate">实时风神看板</h3>
+                  </div>
+                  <a
+                    href={data.fengshenUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-primary-600 hover:text-primary-700 font-medium inline-flex items-center gap-1 flex-shrink-0"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" strokeWidth={2} />
+                    在新窗口打开
+                  </a>
+                </div>
+                <div className="relative" style={{ height: '600px' }}>
+                  <iframe
+                    src={data.fengshenUrl}
+                    className="w-full h-full border-0"
+                    style={{ minHeight: '600px' }}
+                    title="风神投流看板"
+                    sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
+                  />
+                  <div className="absolute bottom-2 right-2 text-[10px] text-slate-400 bg-white/70 px-2 py-0.5 rounded backdrop-blur-sm">
+                    需登录字节 SSO 账号查看
                   </div>
                 </div>
-              )}
-
-              <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-                {data.metrics.map((metric) => (
-                  <MetricCard key={metric.key} metric={metric} />
-                ))}
               </div>
+            )}
 
-              <SummaryText summary={data.summary} />
-
-              <AttributionList attributions={data.attributions} />
-
-              {data.hasDataTable && data.dataTableData && (
-                <div>
-                  <h4 className="text-sm font-medium text-gray-700 mb-3 flex items-center gap-2">
-                    <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M3 10h18M9 4v6m6 0v6m6-6v6M3 16h18"
-                      />
-                    </svg>
-                    渠道数据明细
-                  </h4>
-                  <DataTable data={data.dataTableData} />
+            {/* Metrics Grid */}
+            {data.metrics && data.metrics.length > 0 && (
+              <div>
+                <h3 className="text-sm font-semibold text-slate-700 mb-3">关键指标</h3>
+                <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+                  {data.metrics.map((metric) => (
+                    <MetricCard key={metric.key} metric={metric} />
+                  ))}
                 </div>
-              )}
+              </div>
+            )}
 
-              {data.hasDataRefinement && data.dataRefinement && (
-                <DataRefinement dataRefinement={data.dataRefinement} />
-              )}
+            {/* Summary */}
+            <SummaryPanel summary={data.summary} />
 
-              {data.hasAimeAnalysis && data.aimeAnalysis && (
-                <AimeAnalysis analysis={data.aimeAnalysis} />
-              )}
+            {/* Data Table */}
+            {data.hasDataTable && data.dataTableData && (
+              <div>
+                <h3 className="text-sm font-semibold text-slate-700 mb-3">渠道数据明细</h3>
+                <DataTable data={data.dataTableData} />
+              </div>
+            )}
 
-              <div className="flex items-center justify-between pt-4 border-t border-gray-100">
-                <div className="flex items-center gap-2 text-sm text-gray-500">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+            {/* Data Refinement */}
+            {data.hasDataRefinement && (
+              <div className="space-y-4">
+                <h3 className="text-sm font-semibold text-slate-700">数据提炼 · 深度洞察</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="md:col-span-1">
+                    <h4 className="text-xs text-slate-500 font-semibold uppercase tracking-wider mb-2">核心指标</h4>
+                    <div className="space-y-2">
+                      {data.keyMetrics.map((m, i) => (
+                        <div key={i} className="p-3 rounded-xl bg-white border border-slate-200">
+                          <p className="text-xs text-slate-500">{m.label}</p>
+                          <div className="flex items-baseline justify-between gap-2 mt-1">
+                            <span className="text-lg font-bold text-slate-900">{m.displayValue}</span>
+                            <div className={`flex items-center gap-0.5 text-xs font-semibold ${getTrendColor(m.trend)}`}>
+                              {m.changeDisplay}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="md:col-span-1">
+                    <RefinementBlock
+                      title="优质渠道 · Top 表现"
+                      items={data.topPerformers}
+                      tone="success"
                     />
-                  </svg>
-                  <span>数据来源：{data.sourceName}</span>
+                  </div>
+                  <div className="md:col-span-1">
+                    <RefinementBlock
+                      title="待优化渠道 · 关注归因"
+                      items={data.weakPoints}
+                      tone="warning"
+                    />
+                  </div>
                 </div>
-                <span className="text-xs text-gray-400">最后更新：{formatDate(data.updatedAt)}</span>
               </div>
+            )}
+
+            {/* Insights */}
+            {data.hasDataRefinement && data.insights && (
+              <InsightsSection insights={data.insights} />
+            )}
+
+            {/* AIME Analysis */}
+            {data.hasAimeAnalysis && (
+              <AimeAnalysis
+                score={data.aimeScore}
+                trend={data.aimeTrend}
+                suggestions={data.suggestions}
+                optimizations={data.optimizations}
+              />
+            )}
+
+            {/* Footer */}
+            <div className="flex items-center justify-between pt-3 border-t border-slate-100 text-xs text-slate-400">
+              <span>数据源 · {data.sourceName}</span>
+              <span>最后更新 · {formatDate(data.updatedAt)}</span>
             </div>
-          ) : null
+          </div>
         )}
       </Card>
 
-      <Modal
+      <ConfigModal
         isOpen={configModalOpen}
         onClose={() => setConfigModalOpen(false)}
-        title="数据源配置"
-        size="lg"
-        footer={
-          <div className="flex items-center justify-end gap-3">
-            <Button
-              variant="secondary"
-              onClick={() => setConfigModalOpen(false)}
-            >
-              取消
-            </Button>
-            <Button
-              variant="primary"
-              onClick={handleSaveConfig}
-              disabled={!selectedConfigId}
-            >
-              保存配置
-            </Button>
-          </div>
-        }
-      >
-        <div className="space-y-6">
-          {currentConfig && (
-            <div className="bg-blue-50 border border-blue-100 rounded-lg p-4">
-              <div className="flex items-start gap-3">
-                <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 flex-shrink-0">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M5 13l4 4L19 7"
-                    />
-                  </svg>
-                </div>
-                <div className="flex-1">
-                  <h4 className="font-medium text-gray-900">当前数据源</h4>
-                  <p className="text-sm text-gray-700 mt-1">{currentConfig.name}</p>
-                  <div className="flex flex-wrap gap-2 mt-2">
-                    {currentConfig.hasFengshenDashboard && (
-                      <Badge color="blue">风神仪表盘</Badge>
-                    )}
-                    {currentConfig.hasDataTable && (
-                      <Badge color="green">数据明细</Badge>
-                    )}
-                    {currentConfig.hasAimeAnalysis && (
-                      <Badge color="purple">AIME分析</Badge>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          <div>
-            <h4 className="text-sm font-medium text-gray-900 mb-3">选择数据源</h4>
-            {configLoading ? (
-              <div className="space-y-3">
-                {[1, 2, 3].map((i) => (
-                  <Skeleton key={i} className="h-20" />
-                ))}
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {configs.map((config) => (
-                  <div
-                    key={config.id}
-                    className={`border rounded-lg p-4 cursor-pointer transition-all hover:border-blue-300 hover:bg-blue-50 ${
-                      selectedConfigId === config.id
-                        ? 'border-blue-500 bg-blue-50'
-                        : 'border-gray-200'
-                    }`}
-                    onClick={() => setSelectedConfigId(config.id)}
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                          <h5 className="font-medium text-gray-900">{config.name}</h5>
-                          {config.isActive && (
-                            <Badge color="green">当前使用</Badge>
-                          )}
-                        </div>
-                        <p className="text-sm text-gray-500 mt-1">
-                          类型: {config.type === 'fengshen' ? '风神' : config.type === 'api' ? '自定义API' : '演示数据'}
-                        </p>
-                        <div className="flex flex-wrap gap-2 mt-2">
-                          {config.channels.slice(0, 3).map((channel, idx) => (
-                            <span
-                              key={idx}
-                              className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded"
-                            >
-                              {channel}
-                            </span>
-                          ))}
-                          {config.channels.length > 3 && (
-                            <span className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded">
-                              +{config.channels.length - 3}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <input
-                          type="radio"
-                          name="dataSource"
-                          value={config.id}
-                          checked={selectedConfigId === config.id}
-                          onChange={() => setSelectedConfigId(config.id)}
-                          className="text-blue-600 focus:ring-blue-500"
-                        />
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-4 mt-3 pt-3 border-t border-gray-100">
-                      <div className="flex items-center gap-2 text-xs text-gray-500">
-                        {config.hasFengshenDashboard && (
-                          <span className="flex items-center gap-1">
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M5 13l4 4L19 7"
-                              />
-                            </svg>
-                            仪表盘
-                          </span>
-                        )}
-                        {config.hasDataTable && (
-                          <span className="flex items-center gap-1">
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M5 13l4 4L19 7"
-                              />
-                            </svg>
-                            数据明细
-                          </span>
-                        )}
-                        {config.hasAimeAnalysis && (
-                          <span className="flex items-center gap-1">
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M5 13l4 4L19 7"
-                              />
-                            </svg>
-                            AI分析
-                          </span>
-                        )}
-                      </div>
-                      {config.syncInterval && (
-                        <span className="text-xs text-gray-500">
-                          同步间隔: {config.syncInterval}秒
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-            <div className="flex items-start gap-3">
-              <div className="w-8 h-8 bg-yellow-100 rounded-full flex items-center justify-center text-yellow-600 flex-shrink-0 mt-0.5">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                  />
-                </svg>
-              </div>
-              <div className="flex-1">
-                <h5 className="font-medium text-gray-900">配置说明</h5>
-                <ul className="mt-2 space-y-1 text-sm text-gray-600">
-                  <li className="flex items-start gap-2">
-                    <span className="w-1.5 h-1.5 bg-yellow-600 rounded-full mt-2 flex-shrink-0" />
-                    <span>选择需要的数据源后点击"保存配置"生效</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="w-1.5 h-1.5 bg-yellow-600 rounded-full mt-2 flex-shrink-0" />
-                    <span>保存后会自动刷新页面数据</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="w-1.5 h-1.5 bg-yellow-600 rounded-full mt-2 flex-shrink-0" />
-                    <span>如需添加新的数据源，请联系管理员</span>
-                  </li>
-                </ul>
-              </div>
-            </div>
-          </div>
-        </div>
-      </Modal>
+        onSave={handleSaveConfig}
+        configs={configs}
+        currentConfig={currentConfig}
+        selectedConfigId={selectedConfigId}
+        setSelectedConfigId={setSelectedConfigId}
+      />
     </>
-  );
+  )
 }

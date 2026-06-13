@@ -1,6 +1,7 @@
-import { useState } from 'react'
-import { Newspaper, Search, TrendingUp, AlertTriangle, Info, Sparkles, ExternalLink } from 'lucide-react'
-import { mockEvents } from '../mockData'
+import { useEffect, useState } from 'react'
+import { Newspaper, Search, TrendingUp, Info, Sparkles, ExternalLink } from 'lucide-react'
+import { getNews } from '../services/dashboard'
+import type { NewsItem } from '../types/dashboard'
 import { clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
 
@@ -11,25 +12,19 @@ function cn(...inputs: any[]) {
 const categoryLabels = {
   'ai': 'AI',
   'tech': '科技',
-  'internet': '互联网',
-  'competitor': '竞品',
-  'policy': '政策'
+  'finance': '财经'
 }
 
 const categoryColors = {
   'ai': 'bg-[#8B5CF6]/10 text-[#8B5CF6]',
   'tech': 'bg-[#5B6CFF]/10 text-[#5B6CFF]',
-  'internet': 'bg-[#10B981]/10 text-[#10B981]',
-  'competitor': 'bg-[#F59E0B]/10 text-[#F59E0B]',
-  'policy': 'bg-[#EF4444]/10 text-[#EF4444]'
+  'finance': 'bg-[#10B981]/10 text-[#10B981]'
 }
 
 const categoryIcons = {
   'ai': TrendingUp,
   'tech': Info,
-  'internet': Newspaper,
-  'competitor': AlertTriangle,
-  'policy': AlertTriangle
+  'finance': Newspaper
 }
 
 const getNewsImageUrl = (_category: string, index: number) => {
@@ -43,14 +38,48 @@ const getNewsImageUrl = (_category: string, index: number) => {
   return images[index % images.length]
 }
 
-export function Events() {
-  const [categoryFilter, setCategoryFilter] = useState<'all' | 'ai' | 'tech' | 'internet' | 'competitor' | 'policy'>('all')
-  const [search, setSearch] = useState('')
+type DisplayEvent = {
+  id: string
+  title: string
+  oneLineSummary: string
+  time: string
+  category: 'ai' | 'tech' | 'finance'
+  sourceLink: string
+  source: string
+  imageUrl: string
+  hotTags: string[]
+}
 
-  const filteredEvents = [...mockEvents].filter(event => {
+function mapToDisplay(newsItems: NewsItem[]): DisplayEvent[] {
+  return newsItems.map((item, index) => ({
+    id: item.id || `${item.category}_${index}`,
+    title: item.title,
+    oneLineSummary: item.summary || '',
+    time: item.publishedAt || '',
+    category: item.category,
+    sourceLink: item.sourceUrl || '',
+    source: item.sourceName || '',
+    imageUrl: item.imageUrl || getNewsImageUrl(item.category, index),
+    hotTags: []
+  }))
+}
+
+export function Events() {
+  const [categoryFilter, setCategoryFilter] = useState<'all' | 'ai' | 'tech' | 'finance'>('all')
+  const [search, setSearch] = useState('')
+  const [allEvents, setAllEvents] = useState<DisplayEvent[]>([])
+
+  useEffect(() => {
+    getNews('all')
+      .then(res => {
+        setAllEvents(mapToDisplay(res.data || []))
+      })
+  }, [])
+
+  const filteredEvents = [...allEvents].filter(event => {
     const matchesCategory = categoryFilter === 'all' || event.category === categoryFilter
-    const matchesSearch = !search || 
-      event.title.toLowerCase().includes(search.toLowerCase()) || 
+    const matchesSearch = !search ||
+      event.title.toLowerCase().includes(search.toLowerCase()) ||
       event.oneLineSummary.toLowerCase().includes(search.toLowerCase())
     return matchesCategory && matchesSearch
   }).sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime())
@@ -58,12 +87,12 @@ export function Events() {
   const topEvents = filteredEvents.slice(0, 3)
   const otherEvents = filteredEvents.slice(3)
 
-  const NewsCard = ({ event, index, isTop = false }: { event: any; index: number; isTop?: boolean }) => {
+  const NewsCard = ({ event, index, isTop = false }: { event: DisplayEvent; index: number; isTop?: boolean }) => {
     const category = event.category as keyof typeof categoryIcons
-    const imageUrl = getNewsImageUrl(category, index)
+    const imageUrl = event.imageUrl || getNewsImageUrl(category, index)
 
     return (
-      <a 
+      <a
         href={event.sourceLink}
         target="_blank"
         rel="noopener noreferrer"
@@ -73,7 +102,7 @@ export function Events() {
         )}
       >
         <div className="relative h-48 overflow-hidden bg-[#F7F8FC]">
-          <img 
+          <img
             src={imageUrl}
             alt={event.title}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
@@ -89,20 +118,20 @@ export function Events() {
             </span>
           </div>
         </div>
-        
+
         <div className="p-5">
           <h3 className="text-base font-semibold text-[#111827] mb-2 line-clamp-2 leading-relaxed group-hover:text-[#5B6CFF] transition-colors">
             {event.title}
           </h3>
-          
+
           <p className="text-[#6B7280] text-sm leading-relaxed mb-3 line-clamp-2">
             {event.oneLineSummary}
           </p>
-          
+
           {event.hotTags.length > 0 && (
             <div className="flex flex-wrap gap-1.5 mb-3">
               {event.hotTags.slice(0, 3).map((tag: string, idx: number) => (
-                <span 
+                <span
                   key={idx}
                   className="px-2 py-1 bg-[#F7F8FC] text-[#6B7280] rounded-lg text-xs border border-[#E5E7EB]"
                 >
@@ -111,11 +140,11 @@ export function Events() {
               ))}
             </div>
           )}
-          
+
           <div className="flex items-center justify-between text-xs text-[#6B7280]">
             <div className="flex items-center gap-1">
               <ExternalLink className="w-3.5 h-3.5" />
-              {event.sources?.[0] || event.source}
+              {event.source || event.sourceLink ? '来源' : ''}
             </div>
           </div>
         </div>
@@ -167,7 +196,7 @@ export function Events() {
             {Object.entries(categoryLabels).map(([key, label]) => (
               <button
                 key={key}
-                onClick={() => setCategoryFilter(key as any)}
+                onClick={() => setCategoryFilter(key as 'all' | 'ai' | 'tech' | 'finance')}
                 className={cn(
                   "px-3.5 py-1.5 rounded-xl text-xs font-medium transition-all duration-200 whitespace-nowrap",
                   categoryFilter === key

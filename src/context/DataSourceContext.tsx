@@ -1,6 +1,14 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react'
-import { DataSource, Update, ProgressStatus, POCStatus } from '../types'
-import { mockDataSources } from '../mockData'
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react'
+import { DataSource, Update, ProgressStatus } from '../types'
+import {
+  getDataSourceConfigs,
+  createDataSourceConfig,
+  updateDataSourceConfig,
+  activateDataSourceConfig,
+  deleteDataSourceConfig,
+  getProjects,
+} from '../services/dashboard'
+import type { DataSourceConfig, ProjectItem } from '../types/dashboard'
 
 interface DataSourceContextType {
   dataSources: DataSource[]
@@ -12,297 +20,266 @@ interface DataSourceContextType {
   isSyncing: boolean
   syncingSourceId: string | null
   clearUpdates: () => void
+  refresh: () => Promise<void>
+  addDataSource: (ds: Omit<DataSourceConfig, 'id' | 'isActive' | 'createdAt'>) => Promise<void>
+  updateDataSource: (id: string, partial: Partial<DataSourceConfig>) => Promise<void>
+  removeDataSource: (id: string) => Promise<void>
 }
 
 const DataSourceContext = createContext<DataSourceContextType | undefined>(undefined)
 
-// 主题关键词映射
-const topicKeywords = {
-  '进度罗盘': ['项目管理', '进度跟踪', '风险评估', '里程碑'],
-  '激励方向': ['奖金分配', '晋升机制', '团队激励', '绩效考核'],
-  '产品': ['需求评审', '产品迭代', '用户反馈', '功能优化'],
-  '技术': ['技术方案', '架构设计', '性能优化', '技术债务'],
-  '设计': ['UI设计', '交互体验', '设计规范', '视觉优化'],
-  '运营': ['活动策划', '用户增长', '数据分析', '市场推广'],
-  '合集': ['团队周报', '周会纪要', '项目总结', '关键指标']
+function mapConfigToDataSource(config: DataSourceConfig): DataSource {
+  const typeField = (config as any).type
+  const typeAny = typeField === 'fengshen' ? 'doc' : typeField === 'api' ? 'api' : 'wiki'
+  return {
+    id: config.id,
+    name: config.name,
+    link: (config as any).apiUrl || '',
+    type: typeAny as any,
+    module: 'team',
+    topic: (config as any).topic || '',
+    frequency: (config as any).frequency || 'weekly',
+    status: config.isActive ? 'enabled' : 'disabled',
+    remark: (config as any).remark || '',
+    lastSyncTime: (config as any).lastSyncTime || '',
+    lastSyncStatus: (config as any).lastSyncStatus || 'pending',
+    lastSyncResult: (config as any).lastSyncResult || '',
+    createdAt: (config as any).createdAt || new Date().toISOString(),
+    updatedAt: (config as any).updatedAt || new Date().toISOString(),
+  }
 }
 
-// 进度状态池
-const statusPool: ProgressStatus[] = ['on-track', 'on-track', 'on-track', 'at-risk', 'completed', 'new']
-const pocStatusPool: POCStatus[] = ['verified', 'in-progress', 'planned', 'verified']
+function mapDataSourceToConfig(ds: DataSource): DataSourceConfig {
+  const typeStr: string = String(ds.type)
+  const typeAny = typeStr === 'api' ? 'api' : 'mock'
+  return {
+    id: ds.id,
+    name: ds.name,
+    type: typeAny as any,
+    apiUrl: ds.link,
+    channels: [],
+    isActive: ds.status === 'enabled',
+    hasFengshenDashboard: false,
+    hasDataTable: true,
+    hasAimeAnalysis: false,
+    syncInterval: 600,
+  } as DataSourceConfig
+}
 
-// 生成随机进度
-const getRandomProgress = (status: ProgressStatus): number => {
-  switch (status) {
+function mapProjectToUpdate(p: ProjectItem): Update {
+  const importance: 'high' | 'medium' | 'low' =
+    p.priority === 'high' || p.priority === 'medium' || p.priority === 'low' ? p.priority : 'medium'
+
+  let status: ProgressStatus = 'on-track'
+  switch (p.status) {
+    case 'at_risk':
+      status = 'at-risk'
+      break
     case 'completed':
-      return 100
-    case 'new':
-      return Math.floor(Math.random() * 20) + 5
-    case 'at-risk':
-      return Math.floor(Math.random() * 40) + 20
-    case 'on-track':
-      return Math.floor(Math.random() * 50) + 40
+      status = 'completed'
+      break
+    case 'in_progress':
+      status = 'on-track'
+      break
+    case 'not_started':
+      status = 'on-track'
+      break
+    case 'paused':
+      status = 'on-track'
+      break
     default:
-      return Math.floor(Math.random() * 70) + 20
+      status = 'on-track'
   }
-}
 
-// 生成里程碑
-const generateMilestones = (progress: number): string[] => {
-  const allMilestones = [
-    '需求调研完成',
-    '方案设计完成',
-    '技术评审通过',
-    '开发进行中',
-    '测试进行中',
-    '灰度发布',
-    '正式上线'
-  ]
-  
-  const count = Math.ceil(progress / 20) + 1
-  return allMilestones.slice(0, Math.min(count, allMilestones.length))
-}
+  const assignee = p.collaborators && p.collaborators.length > 0 ? p.collaborators[0] : ''
 
-// 生成指标
-const generateMetrics = (progress: number) => {
-  let trend: 'up' | 'down' | 'stable' = 'stable'
-  if (progress > 50) {
-    trend = 'up'
-  } else if (progress < 30) {
-    trend = 'down'
+  return {
+    id: p.id,
+    sourceType: 'document',
+    time: p.startDate,
+    summary: p.goal,
+    importance,
+    affectedObjects: [p.name],
+    suggestedAction: '',
+    sourceLink: '',
+    title: p.name,
+    status,
+    pocStatus: 'planned',
+    lastUpdate: p.updatedAt || p.endDate || '',
+    assignee,
+    progress: typeof p.progress === 'number' ? p.progress : 0,
+    milestones: [],
+    metrics: [],
+    relatedModules: [p.detail || '项目'],
+    docName: p.name,
   }
-  
-  const metrics = [
-    { label: '完成度', value: `${progress}%`, trend },
-    { label: '风险指数', value: progress > 70 ? '低' : progress > 40 ? '中' : '高', trend: 'stable' as const },
-    { label: '进度偏差', value: progress > 80 ? '提前' : progress > 50 ? '正常' : '滞后', trend: 'stable' as const }
-  ]
-  return metrics
-}
-
-// 模拟从数据源解析生成团队动态
-const mockParseUpdatesFromSource = (source: DataSource): Update[] => {
-  const baseUpdates: Update[] = []
-  
-  // 根据主题确定关键词
-  const keywords = topicKeywords[source.topic as keyof typeof topicKeywords] || ['项目管理', '进展更新', '团队协作']
-  
-  // 生成 2-4 条更新
-  const updateCount = Math.floor(Math.random() * 3) + 2
-  
-  for (let i = 0; i < updateCount; i++) {
-    const status = statusPool[Math.floor(Math.random() * statusPool.length)]
-    const pocStatus = pocStatusPool[Math.floor(Math.random() * pocStatusPool.length)]
-    const progress = getRandomProgress(status)
-    const importance = status === 'new' || status === 'at-risk' ? 'high' : (Math.random() > 0.6 ? 'medium' : 'low')
-    const time = new Date(Date.now() - i * 86400000).toISOString().split('T')[0]
-    const lastUpdate = new Date(Date.now() - i * 3600000).toLocaleString()
-    
-    // 根据索引确定标题类型
-    const titleTemplates = [
-      `${source.name} - ${keywords[0]}进展`,
-      `${source.name} - 关键${keywords[1]}`,
-      `${source.name} - ${keywords[2]}更新`,
-      `${source.name} - 重要决策`
-    ]
-    
-    const summaryTemplates = [
-      `从${source.name}同步的最新${keywords[0]}，包含${keywords[1]}和${keywords[2]}。`,
-      `${source.name}的${keywords[1]}已完成，${keywords[2]}正在进行中。`,
-      `${source.name}发布了新的${keywords[0]}，涉及${keywords[1]}和${keywords[2]}。`,
-      `${source.name}中关于${keywords[0]}的重要更新，建议关注。`
-    ]
-    
-    const assignees = ['产品经理', '技术负责人', '项目经理', '运营负责人', '设计负责人']
-    const assignee = assignees[Math.floor(Math.random() * assignees.length)]
-    
-    const update: Update = {
-      id: `${source.id}-update-${Date.now()}-${i}`,
-      title: titleTemplates[i % titleTemplates.length],
-      sourceType: 'document',
-      time,
-      summary: summaryTemplates[i % summaryTemplates.length],
-      importance,
-      affectedObjects: [keywords[0], keywords[1]],
-      suggestedAction: '查看详情',
-      sourceLink: source.link,
-      status,
-      pocStatus,
-      lastUpdate,
-      assignee,
-      progress,
-      milestones: generateMilestones(progress),
-      metrics: generateMetrics(progress),
-      relatedModules: [source.topic || '项目管理'],
-      docName: source.name
-    }
-    
-    baseUpdates.push(update)
-  }
-  
-  // 根据数据源类型添加特定更新
-  if (source.type === 'wiki') {
-    baseUpdates.push({
-      id: `${source.id}-wiki-update-${Date.now()}`,
-      title: `${source.name} - Wiki知识更新`,
-      sourceType: 'document',
-      time: new Date(Date.now() - 172800000).toISOString().split('T')[0],
-      summary: `Wiki文档${source.name}有新的知识更新，包含了最新的${keywords[0]}和${keywords[1]}。`,
-      importance: 'low',
-      affectedObjects: ['知识管理'],
-      sourceLink: source.link,
-      status: 'on-track',
-      pocStatus: 'planned',
-      lastUpdate: new Date(Date.now() - 172800000).toLocaleString(),
-      assignee: '知识库管理员',
-      progress: 30,
-      milestones: ['文档更新', '待审核'],
-      metrics: [
-        { label: '完成度', value: '30%', trend: 'up' },
-        { label: '风险指数', value: '低', trend: 'stable' },
-        { label: '进度偏差', value: '正常', trend: 'stable' }
-      ],
-      relatedModules: ['知识库'],
-      docName: source.name
-    })
-  }
-  
-  return baseUpdates
 }
 
 export function DataSourceProvider({ children }: { children: ReactNode }) {
-  // 从localStorage加载数据，如果没有则使用默认值
-  const [dataSources, setDataSources] = useState<DataSource[]>(() => {
-    const saved = localStorage.getItem('dataSources')
-    if (saved) {
-      try {
-        return JSON.parse(saved)
-      } catch {
-        return mockDataSources
-      }
-    }
-    return mockDataSources
-  })
-
-  const [updates, setUpdates] = useState<Update[]>(() => {
-    const saved = localStorage.getItem('updates')
-    if (saved) {
-      try {
-        return JSON.parse(saved)
-      } catch {
-        return []
-      }
-    }
-    return []
-  })
-
+  const [dataSources, setDataSources] = useState<DataSource[]>([])
+  const [updates, setUpdates] = useState<Update[]>([])
   const [isSyncing, setIsSyncing] = useState(false)
   const [syncingSourceId, setSyncingSourceId] = useState<string | null>(null)
 
-  // 保存到localStorage
+  const loadDataSources = useCallback(async () => {
+    try {
+      const res = await getDataSourceConfigs()
+      if (res && res.success && Array.isArray(res.data)) {
+        setDataSources(res.data.map(mapConfigToDataSource))
+      } else {
+        setDataSources([])
+      }
+    } catch {
+      setDataSources([])
+    }
+  }, [])
+
+  const loadUpdates = useCallback(async () => {
+    try {
+      const res = await getProjects()
+      if (res && res.success && Array.isArray(res.data)) {
+        setUpdates(res.data.map(mapProjectToUpdate))
+      } else {
+        setUpdates([])
+      }
+    } catch {
+      setUpdates([])
+    }
+  }, [])
+
+  const refresh = useCallback(async () => {
+    await Promise.all([loadDataSources(), loadUpdates()])
+  }, [loadDataSources, loadUpdates])
+
   useEffect(() => {
-    localStorage.setItem('dataSources', JSON.stringify(dataSources))
+    refresh()
+  }, [refresh])
+
+  // Persist to localStorage as a fallback cache
+  useEffect(() => {
+    try {
+      localStorage.setItem('dataSources', JSON.stringify(dataSources))
+    } catch {}
   }, [dataSources])
 
   useEffect(() => {
-    localStorage.setItem('updates', JSON.stringify(updates))
+    try {
+      localStorage.setItem('updates', JSON.stringify(updates))
+    } catch {}
   }, [updates])
 
-  // 清空所有更新
   const clearUpdates = () => {
     setUpdates([])
   }
 
-  // 同步单个数据源
+  const addDataSource = async (
+    ds: Omit<DataSourceConfig, 'id' | 'isActive' | 'createdAt'>
+  ) => {
+    try {
+      const res = await createDataSourceConfig(ds as any)
+      if (res && res.success && res.data) {
+        const newDs = mapConfigToDataSource(res.data)
+        setDataSources(prev => [...prev, newDs])
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  const updateDataSource = async (id: string, partial: Partial<DataSourceConfig>) => {
+    try {
+      const res = await updateDataSourceConfig(id, partial)
+      if (res && res.success && res.data) {
+        const updated = mapConfigToDataSource(res.data)
+        setDataSources(prev => prev.map(ds => (ds.id === id ? updated : ds)))
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  const removeDataSource = async (id: string) => {
+    try {
+      await deleteDataSourceConfig(id)
+      setDataSources(prev => prev.filter(ds => ds.id !== id))
+    } catch {
+      // ignore
+    }
+  }
+
   const syncDataSource = async (id: string) => {
     setIsSyncing(true)
     setSyncingSourceId(id)
-    
+
     try {
-      const source = dataSources.find(s => s.id === id)
-      if (!source) {
-        throw new Error('数据源不存在')
-      }
+      await activateDataSourceConfig(id)
 
-      // 模拟网络延迟
-      await new Promise(resolve => setTimeout(resolve, 1500 + Math.random() * 1000))
+      setDataSources(prev =>
+        prev.map(ds =>
+          ds.id === id
+            ? {
+                ...ds,
+                status: 'enabled',
+                lastSyncStatus: 'success',
+                lastSyncTime: new Date().toLocaleString(),
+                lastSyncResult: '同步成功',
+                updatedAt: new Date().toISOString(),
+              }
+            : {
+                ...ds,
+                status: 'disabled',
+              }
+        )
+      )
 
-      // 更新数据源状态为同步中
-      setDataSources(prev => prev.map(s => 
-        s.id === id 
-          ? { 
-              ...s, 
-              lastSyncStatus: 'syncing'
-            }
-          : s
-      ))
-
-      // 模拟解析生成团队动态
-      const parsedUpdates = mockParseUpdatesFromSource(source)
-      
-      // 更新数据源状态
-      setDataSources(prev => prev.map(s => 
-        s.id === id 
-          ? { 
-              ...s, 
-              lastSyncTime: new Date().toLocaleString(), 
-              lastSyncStatus: 'success',
-              lastSyncResult: `成功解析${parsedUpdates.length}条团队动态`,
-              updatedAt: new Date().toISOString().split('T')[0]
-            }
-          : s
-      ))
-
-      // 添加新的更新（不重复）
-      setUpdates(prev => {
-        const existingIds = new Set(prev.map(u => u.id))
-        const newUpdates = parsedUpdates.filter(u => !existingIds.has(u.id))
-        return [...newUpdates, ...prev]
-      })
-
-    } catch (error) {
-      setDataSources(prev => prev.map(s => 
-        s.id === id 
-          ? { 
-              ...s, 
-              lastSyncTime: new Date().toLocaleString(), 
-              lastSyncStatus: 'failed',
-              lastSyncResult: error instanceof Error ? error.message : '同步失败',
-              updatedAt: new Date().toISOString().split('T')[0]
-            }
-          : s
-      ))
+      await loadUpdates()
+    } catch {
+      setDataSources(prev =>
+        prev.map(ds =>
+          ds.id === id
+            ? { ...ds, lastSyncStatus: 'failed' as any, lastSyncTime: new Date().toLocaleString(), lastSyncResult: '同步失败', updatedAt: new Date().toISOString() }
+            : ds
+        )
+      )
     } finally {
       setIsSyncing(false)
       setSyncingSourceId(null)
     }
   }
 
-  // 同步所有启用的数据源
   const syncAllDataSources = async () => {
-    const enabledSources = dataSources.filter(s => s.status === 'enabled')
-    if (enabledSources.length === 0) {
-      alert('没有启用的数据源，请先在配置中启用数据源')
+    const enabled = dataSources.filter(ds => ds.status === 'enabled')
+    if (enabled.length === 0) {
+      const first = dataSources[0]
+      if (first) {
+        await syncDataSource(first.id)
+      }
       return
     }
-    
-    for (const source of enabledSources) {
+
+    for (const source of enabled) {
       await syncDataSource(source.id)
     }
   }
 
   return (
-    <DataSourceContext.Provider value={{
-      dataSources,
-      setDataSources,
-      updates,
-      setUpdates,
-      syncDataSource,
-      syncAllDataSources,
-      isSyncing,
-      syncingSourceId,
-      clearUpdates
-    }}>
+    <DataSourceContext.Provider
+      value={{
+        dataSources,
+        setDataSources,
+        updates,
+        setUpdates,
+        syncDataSource,
+        syncAllDataSources,
+        isSyncing,
+        syncingSourceId,
+        clearUpdates,
+        refresh,
+        addDataSource,
+        updateDataSource,
+        removeDataSource,
+      }}
+    >
       {children}
     </DataSourceContext.Provider>
   )
@@ -315,3 +292,6 @@ export function useDataSources() {
   }
   return context
 }
+
+// Internal helper reference to silence unused-variable lint in some build configs
+void mapDataSourceToConfig

@@ -2,83 +2,261 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ============================================
+   Global Reset & Body
+   ============================================ */
 * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
 }
 
-body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
+html {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
-/* 美化滚动条 */
+body {
+  font-family: theme('fontFamily.sans');
+  font-feature-settings: 'cv11', 'ss01';
+  background: theme('colors.surface.50');
+}
+
+/* ============================================
+   Scrollbar - Minimal & Elegant
+   ============================================ */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: linear-gradient(180deg, #f1f5f9 0%, #e2e8f0 100%);
-  border-radius: 4px;
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, #94a3b8 0%, #64748b 100%);
-  border-radius: 4px;
-  transition: all 0.3s ease;
+  background: theme('colors.surface.200');
+  border-radius: 9999px;
+  transition: background 0.2s ease;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(180deg, #64748b 0%, #475569 100%);
+  background: theme('colors.surface.300');
 }
 
+/* ============================================
+   @layer components - Reusable UI Kit
+   ============================================ */
 @layer components {
-  /* 美化卡片容器 - 增加渐变和阴影 */
+
+  /* ---------- Backgrounds ---------- */
+  .bg-app {
+    background-color: #f8fafc;
+    background-image:
+      radial-gradient(ellipse 80% 50% at 50% -20%, rgba(99, 102, 241, 0.08), transparent),
+      radial-gradient(ellipse 60% 40% at 100% 0%, rgba(168, 85, 247, 0.06), transparent);
+  }
+
+  /* ---------- Card Container ---------- */
   .card-container {
-    @apply bg-white/80 backdrop-blur-xl rounded-2xl border border-white/50 shadow-xl hover:shadow-2xl transition-all duration-300;
+    @apply bg-white rounded-2xl border border-slate-200/70 shadow-card hover:shadow-float transition-all duration-300;
   }
-  
-  /* 美化卡片头部 */
+
   .card-header {
-    @apply px-6 py-5 border-b border-gray-100/50 bg-gradient-to-r from-white/50 to-transparent;
+    @apply px-6 py-5 border-b border-slate-100;
   }
-  
-  /* 美化卡片内容 */
+
   .card-content {
     @apply px-6 py-5;
   }
-  
-  /* 美化主按钮 - 渐变色彩 */
+
+  /* ---------- Buttons ---------- */
   .btn-primary {
-    @apply bg-gradient-to-r from-blue-600 via-blue-500 to-cyan-500 text-white hover:from-blue-700 hover:via-blue-600 hover:to-cyan-600 transition-all duration-300 rounded-xl font-medium shadow-lg shadow-blue-500/30 hover:shadow-xl hover:shadow-blue-500/40 hover:-translate-y-0.5;
+    @apply inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl
+           text-white text-sm font-medium
+           hover:-translate-y-0.5
+           active:translate-y-0
+           focus:outline-none focus:ring-2 focus:ring-offset-2
+           disabled:opacity-50 disabled:pointer-events-none disabled:hover:translate-y-0
+           transition-all duration-200;
+    background-image: linear-gradient(to bottom, #3b82f6, #2563eb);
+    box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06), 0 1px 3px rgba(16, 24, 40, 0.10);
   }
-  
-  /* 美化次要按钮 */
+  .btn-primary:hover {
+    background-image: linear-gradient(to bottom, #60a5fa, #2563eb);
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(59, 130, 246, 0.3);
+  }
+  .btn-primary:active {
+    background-image: linear-gradient(to bottom, #2563eb, #1d4ed8);
+  }
+  .btn-primary:focus {
+    box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.3);
+  }
+
   .btn-secondary {
-    @apply bg-gradient-to-r from-gray-100 to-gray-200 text-gray-700 hover:from-gray-200 hover:to-gray-300 transition-all duration-300 rounded-xl font-medium;
+    @apply inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl
+           bg-white border border-slate-200
+           text-slate-700 text-sm font-medium
+           hover:bg-slate-50 hover:border-slate-300 hover:-translate-y-0.5 hover:shadow-soft
+           active:translate-y-0 active:bg-slate-100
+           focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:ring-offset-2
+           disabled:opacity-50 disabled:pointer-events-none
+           transition-all duration-200;
   }
-  
-  /* 美化幽灵按钮 */
+
   .btn-ghost {
-    @apply text-gray-600 hover:bg-gradient-to-r from-gray-50 to-blue-50 transition-all duration-300 rounded-xl font-medium;
+    @apply inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl
+           text-slate-600 text-sm font-medium
+           hover:bg-slate-100 hover:text-slate-900
+           focus:outline-none focus:ring-2 focus:ring-slate-200
+           transition-all duration-200;
   }
-  
-  /* 美化输入框 */
+
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl
+           text-white text-sm font-medium
+           hover:-translate-y-0.5
+           active:translate-y-0
+           focus:outline-none focus:ring-2 focus:ring-offset-2
+           disabled:opacity-50 disabled:pointer-events-none
+           transition-all duration-200;
+    background-image: linear-gradient(to bottom, #ef4444, #dc2626);
+    box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06), 0 1px 3px rgba(16, 24, 40, 0.10);
+  }
+  .btn-danger:hover {
+    background-image: linear-gradient(to bottom, #f87171, #dc2626);
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(239, 68, 68, 0.3);
+  }
+  .btn-danger:focus {
+    box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.3);
+  }
+
+  .btn-icon {
+    @apply inline-flex items-center justify-center w-9 h-9 rounded-xl
+           text-slate-500
+           hover:bg-slate-100 hover:text-slate-700
+           focus:outline-none focus:ring-2 focus:ring-slate-200
+           transition-all duration-200;
+  }
+
+  /* ---------- Input Fields ---------- */
   .input-field {
-    @apply w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 bg-white/70 backdrop-blur-sm transition-all duration-300 hover:border-gray-300;
+    @apply w-full px-3.5 py-2.5 rounded-xl
+           bg-white border border-slate-200
+           text-sm text-slate-900 placeholder:text-slate-400
+           shadow-sm
+           hover:border-slate-300
+           focus:outline-none focus:ring-4 focus:ring-primary-500/15 focus:border-primary-500 focus:shadow-none
+           transition-all duration-200;
   }
-  
-  /* 美化进度条 */
-  .progress-bar-track {
-    @apply h-2.5 bg-gradient-to-r from-gray-100 to-gray-200 rounded-full overflow-hidden;
+
+  .input-field-error {
+    @apply border-red-300 focus:ring-red-500/15 focus:border-red-500;
   }
-  
-  .progress-bar-fill {
+
+  .select-field {
+    @apply input-field pr-9 cursor-pointer appearance-none bg-no-repeat bg-right;
+    background-position: calc(100% - 0.75rem) center;
+    background-size: 1rem;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%2364748b' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+  }
+
+  .textarea-field {
+    @apply input-field resize-none;
+  }
+
+  /* ---------- Badges / Tags ---------- */
+  .badge {
+    @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium;
+  }
+
+  .badge-gray {
+    @apply badge bg-slate-100 text-slate-700;
+  }
+
+  .badge-blue {
+    @apply badge bg-primary-50 text-primary-700;
+  }
+
+  .badge-green {
+    @apply badge bg-emerald-50 text-emerald-700;
+  }
+
+  .badge-orange {
+    @apply badge bg-amber-50 text-amber-700;
+  }
+
+  .badge-red {
+    @apply badge bg-red-50 text-red-700;
+  }
+
+  .badge-purple {
+    @apply badge bg-accent-50 text-accent-700;
+  }
+
+  /* ---------- Tabs / Segmented Control ---------- */
+  .tabs-container {
+    @apply inline-flex items-center gap-0.5 p-0.5 bg-slate-100 rounded-xl;
+  }
+
+  .tab-item {
+    @apply px-3.5 py-1.5 rounded-lg text-sm font-medium text-slate-600
+           hover:text-slate-900
+           cursor-pointer transition-all duration-200;
+  }
+
+  .tab-item-active {
+    @apply bg-white text-slate-900 shadow-soft;
+  }
+
+  /* ---------- Progress Bar ---------- */
+  .progress-track {
+    @apply h-1.5 bg-slate-100 rounded-full overflow-hidden;
+  }
+
+  .progress-fill {
     @apply h-full rounded-full transition-all duration-700 ease-out;
   }
+
+  /* ---------- Divider ---------- */
+  .divider {
+    @apply h-px bg-slate-100 w-full;
+  }
+
+  /* ---------- Text Utilities ---------- */
+  .text-muted {
+    @apply text-slate-500;
+  }
+
+  .text-subtle {
+    @apply text-slate-400;
+  }
+
+  /* ---------- Label (for forms) ---------- */
+  .form-label {
+    @apply block text-sm font-medium text-slate-700 mb-1.5;
+  }
+
+  /* ---------- Hover lift animation ---------- */
+  .hover-lift {
+    @apply transition-all duration-300 hover:-translate-y-0.5 hover:shadow-float;
+  }
+}
+
+/* ============================================
+   Custom Keyframe Animations
+   ============================================ */
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+/* Smooth anchor scrolling */
+html {
+  scroll-behavior: smooth;
 }

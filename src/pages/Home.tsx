@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Play,
@@ -9,12 +10,12 @@ import {
   Clock,
   ArrowRight,
   Calendar,
-  MessageSquare,
   CheckCircle,
   Zap,
   Compass
 } from 'lucide-react'
-import { mockItems, mockUpdates, mockEvents } from '../mockData'
+import { getTodos, getProjects, getNews } from '../services/dashboard'
+import type { TodoItem } from '../types/dashboard'
 import { clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
 
@@ -30,9 +31,42 @@ export function Home() {
     day: 'numeric',
     weekday: 'long'
   })
-  
-  const highPriorityItems = mockItems.filter(item => item.priority === 'high' && item.status !== 'completed')
-  const pendingItemsCount = mockItems.filter(i => i.status !== 'completed').length
+
+  const [todos, setTodos] = useState<TodoItem[]>([])
+  const [projects, setProjects] = useState<any[]>([])
+  const [newsList, setNewsList] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const todayDate = new Date().toISOString().split('T')[0]
+    setLoading(true)
+    Promise.all([
+      getTodos(todayDate).then(res => res.data),
+      getProjects().then(res => res.data),
+      getNews('all').then(res => res.data)
+    ]).then(([todosData, projectsData, newsData]) => {
+      setTodos(todosData || [])
+      setProjects(projectsData || [])
+      setNewsList(newsData || [])
+      setLoading(false)
+    }).catch(() => {
+      setLoading(false)
+    })
+  }, [])
+
+  const highPriorityItems = todos
+    .filter(item => item.priority === 'high' && item.status !== 'done')
+    .map(item => ({
+      id: item.id,
+      title: item.content,
+      description: item.remark || '',
+      priority: item.priority,
+      status: item.status,
+      deadline: '',
+      assignee: '',
+      latestProgress: ''
+    }))
+  const pendingItemsCount = todos.filter(i => i.status !== 'done').length
 
   const handleGenerateReport = () => {
     alert('生成周报功能已触发！')
@@ -131,7 +165,7 @@ export function Home() {
                 <Users className="w-6 h-6 text-[#10B981]" />
               </div>
             </div>
-            <p className="text-4xl font-bold text-[#111827] mb-1">{mockUpdates.length}</p>
+            <p className="text-4xl font-bold text-[#111827] mb-1">{loading ? 0 : projects.length}</p>
             <p className="text-[#6B7280] text-sm">团队动态</p>
           </div>
 
@@ -144,7 +178,7 @@ export function Home() {
                 <Newspaper className="w-6 h-6 text-[#F59E0B]" />
               </div>
             </div>
-            <p className="text-4xl font-bold text-[#111827] mb-1">{mockEvents.length}</p>
+            <p className="text-4xl font-bold text-[#111827] mb-1">{loading ? 0 : newsList.length}</p>
             <p className="text-[#6B7280] text-sm">行业大事</p>
           </div>
         </div>
@@ -267,40 +301,37 @@ export function Home() {
             </div>
 
             <div className="space-y-3">
-              {mockUpdates.slice(0, 5).map((update) => (
+              {(projects || []).slice(0, 5).map((update, idx) => (
                 <div
-                  key={update.id}
+                  key={update.id || idx}
                   className="bg-white rounded-2xl p-5 border border-[#E5E7EB] hover:border-[#5B6CFF]/20 hover:shadow-md transition-all duration-200 cursor-pointer group"
                   onClick={() => navigate('/team')}
                 >
                   <div className="flex items-start gap-4">
                     <div className={cn(
                       'w-10 h-10 rounded-xl flex items-center justify-center shrink-0',
-                      update.sourceType === 'meeting' && 'bg-[#5B6CFF]/10 text-[#5B6CFF]',
-                      update.sourceType === 'chat' && 'bg-[#10B981]/10 text-[#10B981]',
-                      update.sourceType === 'document' && 'bg-[#8B5CF6]/10 text-[#8B5CF6]',
-                      update.sourceType === 'external' && 'bg-[#F59E0B]/10 text-[#F59E0B]'
+                      update.priority === 'high' && 'bg-[#5B6CFF]/10 text-[#5B6CFF]',
+                      update.priority === 'medium' && 'bg-[#10B981]/10 text-[#10B981]',
+                      update.priority === 'low' && 'bg-[#F59E0B]/10 text-[#F59E0B]',
+                      !['high', 'medium', 'low'].includes(update.priority) && 'bg-[#8B5CF6]/10 text-[#8B5CF6]'
                     )}>
-                      {update.sourceType === 'meeting' && <Calendar className="w-5 h-5" />}
-                      {update.sourceType === 'chat' && <MessageSquare className="w-5 h-5" />}
-                      {update.sourceType === 'document' && <FileText className="w-5 h-5" />}
-                      {update.sourceType === 'external' && <Newspaper className="w-5 h-5" />}
+                      {update.status === 'in_progress' && <Play className="w-5 h-5" />}
+                      {update.status === 'at_risk' && <Zap className="w-5 h-5" />}
+                      {update.status === 'completed' && <CheckCircle className="w-5 h-5" />}
+                      {!['in_progress', 'at_risk', 'completed'].includes(update.status) && <FileText className="w-5 h-5" />}
                     </div>
-                    
+
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1.5">
-                        <span className="text-xs text-[#6B7280]">{update.time}</span>
-                        {update.importance === 'high' && (
-                          <span className="px-2 py-0.5 bg-[#EF4444]/10 text-[#EF4444] text-[10px] font-bold rounded-full">
-                            重要
-                          </span>
-                        )}
+                        <span className="text-xs text-[#6B7280]">{update.updatedAt || update.startDate || ''}</span>
                       </div>
-                      <p className="text-sm text-[#111827] mb-2 group-hover:text-[#5B6CFF] transition-colors">{update.summary}</p>
-                      {update.suggestedAction && (
+                      <p className="text-sm text-[#111827] mb-2 group-hover:text-[#5B6CFF] transition-colors">
+                        {update.name || '项目'}：{update.currentTask || update.goal || ''}
+                      </p>
+                      {update.progress !== undefined && (
                         <div className="flex items-center gap-1.5 text-xs text-[#5B6CFF]">
                           <ArrowRight className="w-3.5 h-3.5" />
-                          <span>{update.suggestedAction}</span>
+                          <span>进度 {update.progress}%</span>
                         </div>
                       )}
                     </div>
